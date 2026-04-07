@@ -1,0 +1,29 @@
+# Environment — NEVER commit API keys
+.env
+.env.local
+.env.*.local
+
+# OAuth tokens — contain user credentials
+gmail_token.json
+**/gmail_token.json
+
+# Dependencies
+node_modules/
+dashboard/node_modules/
+
+# Build output
+dist/
+dashboard/dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp

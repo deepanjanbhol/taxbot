@@ -1,0 +1,72 @@
+{
+  "id": "taxbot",
+  "name": "TaxBot",
+  "description": "Tax filing assistant: crawls documents and Gmail for tax data, generates Form 1040, finds CPAs with pricing, sends SMS report.",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "twilioAccountSid": {
+        "type": "string",
+        "description": "Twilio Account SID for SMS delivery"
+      },
+      "twilioAuthToken": {
+        "type": "string",
+        "description": "Twilio Auth Token"
+      },
+      "twilioFromNumber": {
+        "type": "string",
+        "description": "Twilio phone number to send from (E.164 format, e.g. +12025551234)"
+      },
+      "recipientPhone": {
+        "type": "string",
+        "description": "Your phone number to receive the report (E.164 format)"
+      },
+      "telegramBotToken": {
+        "type": "string",
+        "description": "Telegram Bot API token from @BotFather (alternative to Twilio SMS)"
+      },
+      "telegramChatId": {
+        "type": "string",
+        "description": "Telegram chat ID to send reports to (run getUpdates after messaging your bot to find it)"
+      },
+      "gmailCredentialsPath": {
+        "type": "string",
+        "description": "Path to Google OAuth2 credentials.json from Google Cloud Console",
+        "default": "~/.config/taxbot/gmail_credentials.json"
+      },
+      "gmailTokenPath": {
+        "type": "string",
+        "description": "Path where Gmail OAuth token will be cached",
+        "default": "~/.config/taxbot/gmail_token.json"
+      },
+      "taxDocumentsFolder": {
+        "type": "string",
+        "description": "Default local folder to scan for tax documents"
+      },
+      "taxYear": {
+        "type": "integer",
+        "description": "Tax year to file for",
+        "default": 2025
+      },
+      "userLocation": {
+        "type": "string",
+        "description": "City, State for CPA search (e.g. 'Seattle, WA')"
+      }
+    },
+    "required": []
+  },
+  "uiHints": {
+    "twilioAccountSid": { "label": "Twilio Account SID" },
+    "twilioAuthToken":  { "label": "Twilio Auth Token", "sensitive": true },
+    "twilioFromNumber": { "label": "Twilio From Number", "placeholder": "+12025551234" },
+    "recipientPhone":   { "label": "Your Phone Number",  "placeholder": "+12025559876" },
+    "telegramBotToken": { "label": "Telegram Bot Token", "sensitive": true },
+    "telegramChatId":   { "label": "Telegram Chat ID" },
+    "gmailCredentialsPath": { "label": "Gmail credentials.json path" },
+    "taxDocumentsFolder":   { "label": "Tax Documents Folder", "placeholder": "/Users/you/Documents/Taxes/2025" },
+    "taxYear":              { "label": "Tax Year" },
+    "userLocation":         { "label": "Your City & State", "placeholder": "Seattle, WA" }
+  }
+}

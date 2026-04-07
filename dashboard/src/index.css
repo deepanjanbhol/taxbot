@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+:root {
+  --tax-green:   #22c55e;
+  --tax-red:     #ef4444;
+  --tax-gold:    #f59e0b;
+  --tax-blue:    #3b82f6;
+  --tax-purple:  #8b5cf6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Monospace numbers */
+.font-mono {
+  font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* Tailwind bg-slate-750 shim */
+.bg-slate-750 { background-color: #263244; }
+
+/* ── Evalytics-inspired theme tokens ── */
+:root {
+  --nav-bg: #0d0d2b;
+  --page-bg: #0b0b24;
+  --card-bg: rgba(255,255,255,0.04);
+  --card-border: rgba(255,255,255,0.08);
+  --indigo-accent: #6366f1;
+  --indigo-glow: rgba(99,102,241,0.15);
+}
+
+/* ── Sticky note animation ── */
+@keyframes noteSlideIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.note-enter { animation: noteSlideIn 0.18s ease-out forwards; }
+
+/* ── Form 1040 print styles ── */
+@media print {
+  body { background: white !important; color: black !important; }
+  nav, .top-nav, [data-no-print] { display: none !important; }
+  .form1040-notes-panel { display: none !important; }
+  .form1040-paper {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  .form1040-line:hover .note-btn { display: none !important; }
+}
+
+/* ── IRS form amount box ── */
+.irs-amount-box {
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  border: 1px solid #9ca3af;
+  border-radius: 2px;
+  padding: 1px 6px;
+  min-width: 96px;
+  text-align: right;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  background: #f9fafb;
+}
+
+/* ── Dotted leader line ── */
+.dotted-leader {
+  flex: 1;
+  border-bottom: 1px dotted #d1d5db;
+  margin: 0 6px;
+  position: relative;
+  top: -3px;
+}
+
+/* ── TopNav glass effect ── */
+.top-nav-glass {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ── KPI card shine ── */
+.kpi-card {
+  position: relative;
+  overflow: hidden;
+}
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* ── Scrollbar for dark panels ── */
+.dark-scroll::-webkit-scrollbar { width: 5px; }
+.dark-scroll::-webkit-scrollbar-track { background: transparent; }
+.dark-scroll::-webkit-scrollbar-thumb { background: #3730a3; border-radius: 3px; }
+

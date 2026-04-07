@@ -1,0 +1,44 @@
+{
+  "name": "@taxfiling/openclaw-taxbot",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AI-powered tax filing assistant for OpenClaw — crawls your documents, builds Form 1040, finds CPAs, and texts you the result.",
+  "main": "index.ts",
+  "scripts": {
+    "dashboard": "npm run build:dashboard && npm run start:server",
+    "dashboard:dev": "concurrently \"npm run dev:server\" \"npm run dev:ui\"",
+    "dev:ui": "cd dashboard && npm run dev",
+    "dev:server": "cd server && node node_modules/tsx/dist/cli.mjs index.ts",
+    "build:dashboard": "cd dashboard && npm run build",
+    "start:server": "cd server && node node_modules/tsx/dist/cli.mjs index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.81.0",
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "@sinclair/typebox": "^0.32.0",
+    "concurrently": "^9.2.1",
+    "google-auth-library": "^9.0.0",
+    "googleapis": "^144.0.0",
+    "pdf-parse": "^1.1.1",
+    "twilio": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pdf-parse": "^1.1.4",
+    "openclaw": ">=2026.3.24",
+    "typescript": "^5.5.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.24"
+  }
+}
