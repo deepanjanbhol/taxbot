@@ -189,7 +189,7 @@ export function LandingPage() {
                 Open Dashboard →
               </button>
               <a
-                href="https://github.com"
+                href="https://github.com/deepanjanbhol/taxbot"
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
@@ -307,7 +307,7 @@ export function LandingPage() {
               Open Dashboard →
             </button>
             <a
-              href="https://github.com"
+              href="https://github.com/deepanjanbhol/taxbot"
               target="_blank"
               rel="noreferrer"
               className="px-8 py-3.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/20 text-white font-semibold text-sm transition-all"

@@ -106,7 +106,7 @@ Optional:
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/your-username/taxbot.git
+git clone https://github.com/deepanjanbhol/taxbot.git
 cd taxbot
 
 # 2. Install dependencies
