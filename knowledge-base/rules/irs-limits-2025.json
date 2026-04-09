@@ -1,0 +1,97 @@
+{
+  "_meta": {
+    "taxYear": 2025,
+    "source": "IRS Rev. Proc. 2024-40; IRS Notice 2024-80",
+    "lastUpdated": "2025-01-01"
+  },
+  "retirementAccounts": {
+    "traditional401k": {
+      "employeeLimit": 23500,
+      "catchUpAge50": 7500,
+      "combinedLimit": 70000
+    },
+    "simpleIra": {
+      "limit": 16500,
+      "catchUpAge50": 3500
+    },
+    "traditionalIra": {
+      "limit": 7000,
+      "catchUpAge50": 1000,
+      "deductibilityPhaseOut": {
+        "coveredByWorkplacePlan": {
+          "single": { "start": 79000,  "end": 89000 },
+          "mfj":    { "start": 126000, "end": 146000 },
+          "mfs":    { "start": 0,      "end": 10000 }
+        },
+        "notCoveredButSpouseIs": {
+          "mfj": { "start": 236000, "end": 246000 }
+        }
+      }
+    },
+    "rothIra": {
+      "limit": 7000,
+      "catchUpAge50": 1000,
+      "incomePhaseOut": {
+        "single": { "start": 150000, "end": 165000 },
+        "mfj":    { "start": 236000, "end": 246000 },
+        "mfs":    { "start": 0,      "end": 10000 }
+      }
+    },
+    "sepIra": {
+      "percentOfCompensation": 0.25,
+      "maxContribution": 70000
+    }
+  },
+  "hsa": {
+    "selfOnly":  { "limit": 4300, "catchUpAge55": 1000 },
+    "family":    { "limit": 8550, "catchUpAge55": 1000 }
+  },
+  "fsa": {
+    "dependentCare": 5000,
+    "medical": 3300
+  },
+  "eitc": {
+    "investmentIncomeLimit": 11600,
+    "byChildCount": [
+      { "children": 0, "maxCredit": 632,  "maxIncomeSingle": 18591,  "maxIncomeMfj": 25511 },
+      { "children": 1, "maxCredit": 4213, "maxIncomeSingle": 49084,  "maxIncomeMfj": 56004 },
+      { "children": 2, "maxCredit": 6960, "maxIncomeSingle": 55768,  "maxIncomeMfj": 62688 },
+      { "children": 3, "maxCredit": 7830, "maxIncomeSingle": 59899,  "maxIncomeMfj": 66819 }
+    ]
+  },
+  "estimatedTax": {
+    "minimumOwedBeforeRequiringPayments": 1000,
+    "safeHarborCurrentYear": 1.00,
+    "safeHarborPriorYear": {
+      "standard": 1.00,
+      "highIncome": 1.10
+    },
+    "highIncomeThreshold": 150000,
+    "quarterlyDueDates": ["April 15", "June 16", "September 15", "January 15 (next year)"]
+  },
+  "mileageRates": {
+    "business":   0.70,
+    "medical":    0.21,
+    "charitable": 0.14
+  },
+  "educatorExpenses": {
+    "maxDeduction": 300
+  },
+  "studentLoanInterest": {
+    "maxDeduction": 2500,
+    "phaseOutStart": { "single": 80000, "mfj": 165000 },
+    "phaseOutEnd":   { "single": 95000, "mfj": 195000 },
+    "notes": "IRS Rev. Proc. 2024-40. MFS filers cannot claim this deduction."
+  },
+  "foreignIncome": {
+    "feieExclusion": 130000,
+    "fbarThreshold": 10000
+  },
+  "socialSecurityWageBase": 176100,
+  "additionalMedicareThreshold": {
+    "single": 200000,
+    "mfj":    250000,
+    "mfs":    125000,
+    "hoh":    200000
+  }
+}

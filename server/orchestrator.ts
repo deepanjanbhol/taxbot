@@ -35,9 +35,14 @@ const NODE      = process.execPath;
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface OrchestratorRunResult {
-  runId: string;
-  startedAt: string;
-  completedAt: string;
+  runId:        string;
+  startedAt:    string;
+  completedAt:  string;
+  form1040Text?: string;
+  refundOrOwed?: number;
+  extractedData?: unknown;
+  cpaList?:      unknown[];
+  bbbProvisions?: Record<string, number>;
 }
 
 /** Human-readable label for each MCP tool */
@@ -54,9 +59,9 @@ const TOOL_LABELS: Record<string, string> = {
 const ASK_HUMAN_TOOL: Anthropic.Tool = {
   name: "ask_human",
   description: "Pause the pipeline and ask the user a clarifying question. " +
-    "Use this FIRST to collect filing status and dependents. " +
-    "Use it ONCE more after scanning if an obviously critical document type is missing. " +
-    "Do NOT use it more than twice per run.",
+    "Use it TWICE at the start (filing status, then personal details). " +
+    "Use it ONCE more after scanning only if a critical document type is clearly missing. " +
+    "Do NOT use it more than three times per run.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -158,27 +163,37 @@ function buildSystemPrompt(config: TaxBotConfig): string {
 Your job is to orchestrate a complete US federal tax analysis by calling the available tools in order.
 
 WORKFLOW:
-1. ask_human — Ask for filing status and number of dependents under 17.
+1. ask_human — Ask for filing status only.
    - step_label: "Filing Status"
    - question: "What is your filing status for ${config.taxYear || 2025}?"
    - options: ["Single", "Married Filing Jointly (MFJ)", "Married Filing Separately (MFS)", "Head of Household (HOH)"]
-   - After the user answers, pass their filing status to compute_form_1040 as filingStatus using the SHORT code: single | mfj | mfs | hoh
-   Then ask a follow-up in the SAME call or note dependents in the question.
 
-2. scan_tax_documents — Scan the folder for all tax documents.
+2. ask_human — Ask for personal details needed for accurate tax computation.
+   - step_label: "Personal Details"
+   - question: "Please answer the following:\\n1. How many qualifying children under age 17 do you have? (This determines your Child Tax Credit — $2,500/child under the Big Beautiful Bill)\\n2. How many other dependents (any age)? Enter 0 if none.\\n3. Are you (or your spouse if MFJ) age 65 or older? (yes/no)\\n4. If filing Married Filing Jointly, what is your spouse's name?"
+   - (no options — user types a free-form answer)
 
-3. ask_human (OPTIONAL) — ONLY if an obviously critical document type is clearly absent after scanning
-   (e.g. no W-2 found for a wage earner, no 1099-INT when interest was expected).
+3. scan_tax_documents — Scan the folder for all tax documents.
+
+4. ask_human (OPTIONAL) — ONLY if an obviously critical document type is clearly absent after scanning
+   (e.g. no W-2 found for a wage earner). Skip entirely if documents look complete.
    - step_label: "Missing Documents?"
-   Keep this question brief and specific. Skip entirely if documents look complete.
 
-4. extract_income_fields — Extract all dollar values from the scanned documents.
+5. extract_income_fields — Extract all dollar values from the scanned documents.
 
-5. compute_form_1040 — Compute the full 1040 using the extracted data AND the filing status the user provided.
+6. compute_form_1040 — Compute the full 1040.
+   CRITICAL: Before calling this tool, UPDATE the tax_input object from extract_income_fields with ALL
+   personal info from the ask_human answers:
+   - filingStatus: short code from answer 1 (single | mfj | mfs | hoh)
+   - dependentsUnder17: integer from answer 2 question 1 (e.g. 2)
+   - otherDependents: integer from answer 2 question 2
+   - age65OrOlder: boolean from answer 2 question 3
+   - spouseName: from answer 2 question 4 (if MFJ)
+   Do NOT leave dependentsUnder17 as 0 if the user said they have children.
 
-6. find_tax_professionals — Find CPAs near the user.
+7. find_tax_professionals — Find CPAs near the user.
 
-7. ${deliveryTool} — Deliver the report.
+8. ${deliveryTool} — Deliver the report.
 
 USER CONFIGURATION:
 - Tax documents folder: ${config.taxDocumentsFolder || "(not set)"}
@@ -190,9 +205,8 @@ USER CONFIGURATION:
 
 RULES:
 - Complete all steps even if one has partial results
-- Pass the filing status answer from ask_human as the filingStatus parameter to compute_form_1040
+- ALWAYS update dependentsUnder17 and other personal fields in tax_input before calling compute_form_1040
 - For find_tax_professionals, use location="${hasLocation ? config.userLocation : "United States"}"
-- For return_complexity, summarize the return complexity from the documents
 - For send/save report, build a compact SMS from the form1040Text and CPA list
 - If a step errors, continue to the next step with what you have
 - Be concise — do not add commentary between tool calls`;
@@ -259,9 +273,12 @@ export async function runOrchestrator(
   // Track step start times for duration calculation
   const stepStartTime = new Map<string, number>();
 
-  // Collect data across steps for building the final SMS
-  let form1040Text = "";
-  let cpaList: unknown[] = [];
+  // Collect data across steps for building the final SMS and history
+  let form1040Text  = "";
+  let cpaList:       unknown[] = [];
+  let extractedData: unknown   = null;
+  let refundOrOwed:  number | undefined;
+  let bbbProvisions: Record<string, number> | undefined;
 
   for (let iteration = 0; iteration < 25; iteration++) {
     const response = await anthropic.messages.create({
@@ -356,9 +373,20 @@ export async function runOrchestrator(
       let parsedResult: Record<string, unknown> = {};
       try { parsedResult = JSON.parse(resultText); } catch { /* leave empty */ }
 
-      // Stash data for SMS building
-      if (tu.name === "compute_form_1040" && parsedResult.form1040Text) {
-        form1040Text = parsedResult.form1040Text as string;
+      // Stash data for SMS building and history persistence
+      if (tu.name === "extract_income_fields" && parsedResult.taxInput) {
+        extractedData = parsedResult.taxInput;
+      }
+      if (tu.name === "compute_form_1040") {
+        if (parsedResult.form1040Text) form1040Text = parsedResult.form1040Text as string;
+        const metrics = parsedResult.metrics as Record<string, unknown> | undefined;
+        if (metrics?.refundOrOwed !== undefined) refundOrOwed = metrics.refundOrOwed as number;
+        if (Array.isArray(parsedResult.bbbProvisions)) {
+          // Convert array of provision strings to a keyed object for export
+          bbbProvisions = {};
+        } else if (parsedResult.bbbProvisions && typeof parsedResult.bbbProvisions === "object") {
+          bbbProvisions = parsedResult.bbbProvisions as Record<string, number>;
+        }
       }
       if (tu.name === "find_tax_professionals" && Array.isArray(parsedResult.cpas)) {
         cpaList = parsedResult.cpas;
@@ -413,7 +441,14 @@ export async function runOrchestrator(
   const totalMs = Date.now() - new Date(startedAt).getTime();
   emit(clients, { type: "pipeline:done", runId, totalMs });
 
-  return { runId, startedAt, completedAt: new Date().toISOString() };
+  return {
+    runId, startedAt, completedAt: new Date().toISOString(),
+    form1040Text:  form1040Text  || undefined,
+    refundOrOwed,
+    extractedData: extractedData ?? undefined,
+    cpaList:       cpaList.length > 0 ? cpaList : undefined,
+    bbbProvisions,
+  };
 }
 
 // ── Progress message helper ───────────────────────────────────────────────────

@@ -49,7 +49,7 @@ interface PipelineStore {
   configLoaded: boolean;
 
   // Active tab
-  activeTab: "landing" | "pipeline" | "documents" | "editor" | "form1040" | "cpa" | "sms" | "history" | "setup";
+  activeTab: "landing" | "pipeline" | "documents" | "editor" | "form1040" | "cpa" | "sms" | "history" | "bot" | "setup";
 
   // Actions
   setActiveTab: (tab: PipelineStore["activeTab"]) => void;

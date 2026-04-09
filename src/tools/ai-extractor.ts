@@ -15,6 +15,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { TaxInputData } from "./form-generator.js";
 import type { FilingStatus } from "../utils/tax-calculator.js";
+import { IRS_LIMITS } from "../utils/tax-rules-loader.js";
 
 // ── Field registry ─────────────────────────────────────────────────────────────
 
@@ -314,7 +315,7 @@ export async function extractTaxDataWithAI(
     otherIncome:               get("otherIncome"),
 
     studentLoanInterest:       get("studentLoanInterest"),
-    educatorExpenses:          Math.min(get("educatorExpenses"), 300), // IRS cap
+    educatorExpenses:          Math.min(get("educatorExpenses"), IRS_LIMITS.educatorExpenses.maxDeduction),
     hsaDeduction:              get("hsaDeduction"),
     selfEmployedHealthInsurance: get("selfEmployedHealthInsurance"),
     iraDeduction:              get("iraDeduction"),
@@ -343,7 +344,7 @@ export async function extractTaxDataWithAI(
 
     age65OrOlder:              false,
     // BBB provisions: off by default; user can enable in settings if applicable
-    bigBeautifulBillEnacted:   false,
+    bigBeautifulBillEnacted:   true,  // BBB enacted for 2025 tax year
     receivedTips:              get("tipIncome") > 0,
     receivedOvertime:          get("overtimePay") > 0,
     hasCarLoan:                get("carLoanInterest") > 0,

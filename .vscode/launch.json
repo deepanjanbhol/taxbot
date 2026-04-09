@@ -1,0 +1,242 @@
+{
+  // VS Code Launch Configuration for TaxBot
+  //
+  // Architecture:
+  //   Backend  → server/index.ts  (tsx + Express + WebSocket, port 7329)
+  //   Frontend → dashboard/       (Vite dev server, port 7330 — proxies /api + /ws to 7329)
+  //
+  // Typical dev workflow: run "TaxBot — Full Stack (Dev)"
+  // Production preview:   run "TaxBot Server (Production)" only — serves built ./server/public
+  "version": "0.2.0",
+
+  // ── Compound launchers ──────────────────────────────────────────────────────
+  "compounds": [
+    {
+      "name": "TaxBot — Full Stack (Dev)",
+      "configurations": [
+        "TaxBot Server",
+        "Vite Frontend"
+      ],
+      "stopAll": true,
+      "presentation": {
+        "hidden": false,
+        "group": "TaxBot",
+        "order": 1
+      }
+    },
+    {
+      "name": "TaxBot — Full Stack + Chrome",
+      "configurations": [
+        "TaxBot Server",
+        "Vite Frontend",
+        "Debug in Chrome (Vite)"
+      ],
+      "stopAll": true,
+      "presentation": {
+        "hidden": false,
+        "group": "TaxBot",
+        "order": 2
+      }
+    }
+  ],
+
+  // ── Individual configurations ───────────────────────────────────────────────
+  "configurations": [
+
+    // ── Backend: Express server (tsx, TypeScript, hot-reload via nodemon-like restart) ──
+    {
+      "name": "TaxBot Server",
+      "type": "node",
+      "request": "launch",
+      "preLaunchTask": "Kill port 7329",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "${workspaceFolder}/server/node_modules/tsx/dist/cli.mjs"
+      ],
+      "args": [
+        "${workspaceFolder}/server/index.ts"
+      ],
+      "cwd": "${workspaceFolder}/server",
+      "env": {
+        // Dev mode: suppresses auto-open of :7329 so only the Vite frontend at :7330 opens
+        "NODE_ENV": "development"
+        // API key falls back to .env file loaded in index.ts — can also set here
+        // "ANTHROPIC_API_KEY": "sk-ant-..."
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "sourceMaps": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/server/**",
+        "${workspaceFolder}/mcp/**",
+        "${workspaceFolder}/src/**"
+      ],
+      "skipFiles": [
+        "<node_internals>/**",
+        "${workspaceFolder}/server/node_modules/**"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "TaxBot",
+        "order": 3
+      }
+    },
+
+    // ── Frontend: Vite dev server (port 7330, proxies /api + /ws → port 7329) ──
+    {
+      "name": "Vite Frontend",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "cwd": "${workspaceFolder}/dashboard",
+      "env": {
+        "BROWSER": "none"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      // Open the dashboard in the default browser as soon as Vite is ready
+      "serverReadyAction": {
+        "pattern": "Local:.*7330",
+        "uriFormat": "http://127.0.0.1:7330",
+        "action": "openExternally"
+      },
+      "presentation": {
+        "hidden": false,
+        "group": "TaxBot",
+        "order": 4
+      }
+    },
+
+    // ── Chrome debugger — attach to Vite dev server ──────────────────────────
+    {
+      "name": "Debug in Chrome (Vite)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:7330",
+      "webRoot": "${workspaceFolder}/dashboard/src",
+      "sourceMapPathOverrides": {
+        // Vite uses /@fs/ prefix for files outside the project root
+        "/@fs/*": "${workspaceFolder}/*",
+        "/src/*":  "${workspaceFolder}/dashboard/src/*",
+        "/node_modules/*": "${workspaceFolder}/dashboard/node_modules/*"
+      },
+      "presentation": {
+        "hidden": false,
+        "group": "TaxBot",
+        "order": 5
+      }
+    },
+
+    // ── Production preview: serves pre-built ./server/public at port 7329 ────
+    {
+      "name": "TaxBot Server (Production)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "${workspaceFolder}/server/node_modules/tsx/dist/cli.mjs"
+      ],
+      "args": [
+        "${workspaceFolder}/server/index.ts"
+      ],
+      "cwd": "${workspaceFolder}/server",
+      "env": {
+        "NODE_ENV": "production"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "sourceMaps": true,
+      "presentation": {
+        "hidden": false,
+        "group": "TaxBot",
+        "order": 6
+      }
+    },
+
+    // ── Dashboard build (one-shot) ────────────────────────────────────────────
+    {
+      "name": "Build Dashboard",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "build"
+      ],
+      "cwd": "${workspaceFolder}/dashboard",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "presentation": {
+        "hidden": false,
+        "group": "TaxBot",
+        "order": 7
+      }
+    },
+
+    // ── MCP server debugging — run any individual MCP server directly ─────────
+    {
+      "name": "MCP: Scan Documents Server",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "${workspaceFolder}/server/node_modules/tsx/dist/cli.mjs"
+      ],
+      "args": [
+        "${workspaceFolder}/mcp/scan-documents-server.ts"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "presentation": {
+        "hidden": false,
+        "group": "MCP Servers",
+        "order": 1
+      }
+    },
+    {
+      "name": "MCP: Extract Income Server",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "${workspaceFolder}/server/node_modules/tsx/dist/cli.mjs"
+      ],
+      "args": [
+        "${workspaceFolder}/mcp/extract-income-server.ts"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "presentation": {
+        "hidden": false,
+        "group": "MCP Servers",
+        "order": 2
+      }
+    },
+    {
+      "name": "MCP: Compute Tax Server",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "${workspaceFolder}/server/node_modules/tsx/dist/cli.mjs"
+      ],
+      "args": [
+        "${workspaceFolder}/mcp/compute-tax-server.ts"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "presentation": {
+        "hidden": false,
+        "group": "MCP Servers",
+        "order": 3
+      }
+    }
+  ]
+}

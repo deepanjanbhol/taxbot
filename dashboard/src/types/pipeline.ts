@@ -26,6 +26,7 @@ export interface RunHistory {
   form1040?: string;
   cpaList?: CPACardData[];
   extractedData?: TaxFormData;
+  bbbProvisions?: Record<string, number>;
 }
 
 // ── Document types ─────────────────────────────────────────────────────────────
@@ -52,16 +53,21 @@ export interface ScannedDocument {
 
 export interface CPACardData {
   name: string;
-  type: "CPA" | "EA" | "Tax Firm" | "Unknown";
+  type: "CPA" | "EA" | "Tax Firm" | "Online Service" | "Freelancer" | "Unknown";
   location: string;
   phone?: string;
   website?: string;
   rating?: number;
   reviewCount?: number;
   estimatedPrice?: string;
+  priceMin?: number;
   specialties: string[];
   source: string;
   irsVerifyUrl?: string;
+  tier?: 1 | 2 | 3;
+  bestFor?: string;
+  quoteUrl?: string;
+  recommended?: boolean;
 }
 
 // ── 1040 input form ────────────────────────────────────────────────────────────

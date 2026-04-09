@@ -5,7 +5,6 @@ import {
   TrendingUp, AlertTriangle, FileText, Users, Zap,
 } from "lucide-react";
 import { usePipelineStore } from "../store/pipeline";
-import { sendWsMessage } from "../hooks/useWebSocket";
 import { StepDetail } from "./StepDetail";
 import type { DynamicStep, StepStatus } from "../types/pipeline";
 
@@ -131,10 +130,28 @@ function HumanInputPanel({ question, options, runId, stepLabel }: {
 }) {
   const [selected, setSelected] = useState("");
   const [freeText, setFreeText] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
 
-  function submit(answer: string) {
-    if (!answer.trim()) return;
-    sendWsMessage({ type: "human:response", runId, answer: answer.trim() });
+  async function submit(answer: string) {
+    if (!answer.trim() || submitted) return;
+    setSubmitted(true);
+    setError("");
+    try {
+      const res = await fetch("/api/pipeline/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId, answer: answer.trim() }),
+      });
+      if (!res.ok) {
+        const { error: msg } = await res.json() as { error?: string };
+        setError(msg ?? "Failed to submit response");
+        setSubmitted(false);
+      }
+    } catch (e) {
+      setError("Network error — could not reach server");
+      setSubmitted(false);
+    }
   }
 
   return (
@@ -146,12 +163,18 @@ function HumanInputPanel({ question, options, runId, stepLabel }: {
           <p className="text-sm text-gray-800">{question}</p>
         </div>
       </div>
-      {options && options.length > 0 ? (
+      {error && (
+        <p className="text-xs text-red-600 font-medium">{error}</p>
+      )}
+      {submitted && !error ? (
+        <p className="text-xs text-amber-700 font-medium">✓ Response sent — continuing…</p>
+      ) : !submitted && options && options.length > 0 ? (
         <div className="space-y-1.5">
           {options.map(opt => (
             <button
               key={opt}
               onClick={() => { setSelected(opt); submit(opt); }}
+              disabled={submitted}
               className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
                 selected === opt
                   ? "border-amber-400 bg-amber-100 text-amber-800 font-medium"
@@ -175,7 +198,7 @@ function HumanInputPanel({ question, options, runId, stepLabel }: {
           />
           <button
             onClick={() => submit(freeText)}
-            disabled={!freeText.trim()}
+            disabled={!freeText.trim() || submitted}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white text-sm font-medium transition-colors"
           >
             <Send style={{ width: 14, height: 14 }} />
@@ -497,7 +520,7 @@ export function TaxDashboard() {
               <HumanInputPanel
                 question={humanInputPending.question}
                 options={humanInputPending.options}
-                runId={runId ?? humanInputPending.runId}
+                runId={humanInputPending.runId}
                 stepLabel={humanInputPending.stepLabel}
               />
             </div>

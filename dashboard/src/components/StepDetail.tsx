@@ -6,6 +6,7 @@
 
 import { X, FileText, Mail, Calculator, Users, MessageSquare, ExternalLink, AlertTriangle, CheckCircle, Zap, MessageCircleQuestion, HelpCircle } from "lucide-react";
 import type { DynamicStep } from "../types/pipeline";
+import { useTaxRules, fmtAmt, fmtRate } from "../hooks/useTaxRules";
 
 // ── IRS References ─────────────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ function RefLink({ id }: { id: string }) {
   if (!ref) return null;
   return (
     <a href={ref.url} target="_blank" rel="noreferrer"
-      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs hover:bg-blue-500/20 transition-colors">
+      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 border border-blue-200 text-blue-600 text-xs hover:bg-blue-100 transition-colors">
       {ref.label} <ExternalLink className="w-2.5 h-2.5" />
     </a>
   );
@@ -69,25 +70,25 @@ function ScanFilesDetail({ result }: { result: Record<string, unknown> }) {
 
   return (
     <div className="space-y-4">
-      {summary && <p className="text-sm text-slate-300 bg-slate-800 px-3 py-2 rounded">{summary}</p>}
+      {summary && <p className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded">{summary}</p>}
 
       <div className="space-y-3">
         {sortedTypes.map(type => (
           <div key={type}>
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{type}</span>
-              <span className="text-xs text-slate-600">({byType[type]!.length})</span>
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{type}</span>
+              <span className="text-xs text-gray-300">({byType[type]!.length})</span>
             </div>
             <div className="space-y-1">
               {byType[type]!.map((doc, i) => (
-                <div key={i} className={`px-3 py-2 rounded border text-xs ${doc.hasError || doc.isImageBased ? "border-amber-500/30 bg-amber-500/5" : "border-slate-700 bg-slate-800/60"}`}>
+                <div key={i} className={`px-3 py-2 rounded border text-xs ${doc.hasError || doc.isImageBased ? "border-amber-200 bg-amber-50" : "border-gray-200 bg-gray-50"}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-slate-200">{doc.filename}</span>
-                    <span className="text-slate-500 shrink-0">{(doc.sizeBytes / 1024).toFixed(1)} KB</span>
+                    <span className="font-mono text-gray-800">{doc.filename}</span>
+                    <span className="text-gray-400 shrink-0">{(doc.sizeBytes / 1024).toFixed(1)} KB</span>
                   </div>
                   {doc.isImageBased && <p className="text-amber-400 mt-1">⚠ Image-based PDF — text extraction failed. Re-scan needed.</p>}
                   {doc.preview && !doc.isImageBased && (
-                    <pre className="mt-1.5 text-slate-400 whitespace-pre-wrap leading-relaxed line-clamp-4 font-mono text-[10px]">
+                    <pre className="mt-1.5 text-gray-400 whitespace-pre-wrap leading-relaxed line-clamp-4 font-mono text-[10px]">
                       {doc.preview.slice(0, 400)}
                     </pre>
                   )}
@@ -101,12 +102,12 @@ function ScanFilesDetail({ result }: { result: Record<string, unknown> }) {
       {errors.length > 0 && (
         <div className="space-y-1">
           <p className="text-xs font-semibold text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Errors</p>
-          {errors.map((e, i) => <p key={i} className="text-xs text-amber-300 font-mono pl-2">{e}</p>)}
+          {errors.map((e, i) => <p key={i} className="text-xs text-amber-700 font-mono pl-2">{e}</p>)}
         </div>
       )}
 
       <div>
-        <p className="text-xs font-semibold text-slate-400 mb-1.5">IRS References</p>
+        <p className="text-xs font-semibold text-gray-400 mb-1.5">IRS References</p>
         <RefRow ids={["f1040i", "pub17", "pub525"]} />
       </div>
     </div>
@@ -123,18 +124,18 @@ function GmailDetail({ result }: { result: Record<string, unknown> }) {
 
     return (
       <div className="space-y-4">
-        <div className="flex items-start gap-2 px-3 py-3 rounded bg-amber-500/10 border border-amber-500/30 text-sm text-amber-200">
+        <div className="flex items-start gap-2 px-3 py-3 rounded bg-amber-50 border border-amber-200 text-sm text-amber-700">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold mb-1">Gmail unavailable — running on local documents only</p>
-            {fallback && <p className="text-xs text-amber-300/80">{fallback}</p>}
+            {fallback && <p className="text-xs text-amber-700/80">{fallback}</p>}
           </div>
         </div>
 
         {reasons.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-slate-400 mb-1">Why Gmail was unavailable:</p>
-            <ul className="space-y-0.5 text-xs text-slate-400">
+            <p className="text-xs font-semibold text-gray-400 mb-1">Why Gmail was unavailable:</p>
+            <ul className="space-y-0.5 text-xs text-gray-400">
               {reasons.map((r, i) => <li key={i} className="flex items-center gap-2"><span className="text-red-400">✗</span>{r}</li>)}
             </ul>
           </div>
@@ -142,15 +143,15 @@ function GmailDetail({ result }: { result: Record<string, unknown> }) {
 
         {wouldHave.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-slate-400 mb-1">Would have searched Gmail for:</p>
-            <ul className="space-y-0.5 text-xs text-slate-400">
-              {wouldHave.map((s, i) => <li key={i} className="flex items-center gap-2"><span className="text-blue-400">→</span>{s}</li>)}
+            <p className="text-xs font-semibold text-gray-400 mb-1">Would have searched Gmail for:</p>
+            <ul className="space-y-0.5 text-xs text-gray-400">
+              {wouldHave.map((s, i) => <li key={i} className="flex items-center gap-2"><span className="text-blue-600">→</span>{s}</li>)}
             </ul>
           </div>
         )}
 
         {setupAction && (
-          <div className="px-3 py-2.5 rounded bg-blue-500/10 border border-blue-500/30 text-xs text-blue-300">
+          <div className="px-3 py-2.5 rounded bg-blue-50 border border-blue-200 text-xs text-blue-600">
             <span className="font-semibold">To fix:</span> {setupAction}
           </div>
         )}
@@ -161,13 +162,13 @@ function GmailDetail({ result }: { result: Record<string, unknown> }) {
   const emails = (result.emails ?? []) as Array<{ subject: string; from: string; date: string; bodyText: string; attachmentNames: string[] }>;
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-300">{emails.length} tax-related emails found</p>
+      <p className="text-sm text-gray-600">{emails.length} tax-related emails found</p>
       {emails.map((e, i) => (
-        <div key={i} className="px-3 py-2.5 rounded border border-slate-700 bg-slate-800/60 space-y-1">
-          <p className="text-xs font-semibold text-slate-200">{e.subject}</p>
-          <p className="text-xs text-slate-500">From: {e.from} · {e.date}</p>
-          {e.attachmentNames.length > 0 && <p className="text-xs text-blue-400">📎 {e.attachmentNames.join(", ")}</p>}
-          <pre className="text-[10px] font-mono text-slate-400 whitespace-pre-wrap leading-relaxed line-clamp-5 mt-1">{e.bodyText?.slice(0, 500)}</pre>
+        <div key={i} className="px-3 py-2.5 rounded border border-gray-200 bg-gray-50 space-y-1">
+          <p className="text-xs font-semibold text-gray-800">{e.subject}</p>
+          <p className="text-xs text-gray-400">From: {e.from} · {e.date}</p>
+          {e.attachmentNames.length > 0 && <p className="text-xs text-blue-600">📎 {e.attachmentNames.join(", ")}</p>}
+          <pre className="text-[10px] font-mono text-gray-400 whitespace-pre-wrap leading-relaxed line-clamp-5 mt-1">{e.bodyText?.slice(0, 500)}</pre>
         </div>
       ))}
     </div>
@@ -178,22 +179,22 @@ interface CalcRow { label: string; value: string; line?: string; note?: string; 
 
 function CalcTable({ rows }: { rows: CalcRow[] }) {
   return (
-    <div className="divide-y divide-slate-800 rounded-lg border border-slate-700 overflow-hidden text-xs">
+    <div className="divide-y divide-gray-100 rounded-lg border border-gray-200 overflow-hidden text-xs">
       {rows.filter(r => r.value !== "$0" && r.value !== "").map((row, i) => (
         <div key={i} className={`flex items-baseline justify-between px-3 py-1.5 gap-4 ${
-          row.isResult  ? "bg-green-500/10 font-bold text-green-300" :
-          row.isTotal   ? "bg-slate-700/40 font-semibold text-slate-200" :
-          row.isBBB     ? "bg-amber-500/8 text-amber-200" :
-          "text-slate-300"
+          row.isResult  ? "bg-green-50 font-bold text-green-700" :
+          row.isTotal   ? "bg-gray-100 font-semibold text-gray-800" :
+          row.isBBB     ? "bg-amber-50 text-amber-700" :
+          "text-gray-600"
         }`}>
           <div className={`flex items-center gap-1.5 min-w-0 ${row.indent ? "pl-3" : ""}`}>
             {row.isBBB && <Zap className="w-3 h-3 text-amber-400 shrink-0" />}
             <span className="truncate">{row.label}</span>
-            {row.line && <span className="text-slate-600 shrink-0">(L{row.line})</span>}
+            {row.line && <span className="text-gray-300 shrink-0">(L{row.line})</span>}
           </div>
           <div className="text-right shrink-0 font-mono">
             <span>{row.value}</span>
-            {row.note && <span className="ml-2 text-slate-500 font-normal text-[10px]">{row.note}</span>}
+            {row.note && <span className="ml-2 text-gray-400 font-normal text-[10px]">{row.note}</span>}
           </div>
         </div>
       ))}
@@ -202,8 +203,10 @@ function CalcTable({ rows }: { rows: CalcRow[] }) {
 }
 
 function Form1040Detail({ result }: { result: Record<string, unknown> }) {
-  const form1040Text = result.form1040Text as string | undefined;
-  const taxInput     = result.taxInput    as Record<string, unknown> | undefined;
+  const form1040Text  = result.form1040Text  as string | undefined;
+  const taxInput      = result.taxInput      as Record<string, unknown> | undefined;
+  const bbbProvisions = (result.bbbProvisions ?? []) as string[];
+  const taxRules      = useTaxRules();
 
   function fmt(n: unknown): string {
     const num = typeof n === "number" ? n : 0;
@@ -228,20 +231,29 @@ function Form1040Detail({ result }: { result: Record<string, unknown> }) {
     { label: "Other income",                               value: fmt(taxInput.otherIncome) },
   ].filter(Boolean) as CalcRow[] : [];
 
+  // Per-status SALT cap (from KB via pipeline result or hook fallback)
+  const filingStatus  = taxInput?.filingStatus as string | undefined;
+  const saltCapBBB    = taxRules?.saltCapBBB ?? {};
+  const saltCapAmt    = filingStatus ? (saltCapBBB[filingStatus] ?? saltCapBBB["single"] ?? 20000) : 20000;
+  const seniorAmt     = taxRules?.seniorDeductionAmount ?? 4000;
+
   const adjRows: CalcRow[] = taxInput ? [
-    { label: "Student loan interest",        line: "21", value: fmt(taxInput.studentLoanInterest), note: "max $2,500" },
-    { label: "Educator expenses",            line: "11", value: fmt(taxInput.educatorExpenses),    note: "max $300" },
-    { label: "HSA deduction",                line: "13", value: fmt(taxInput.hsaDeduction) },
-    { label: "Self-employed health ins.",    line: "17", value: fmt(taxInput.selfEmployedHealthInsurance) },
-    { label: "IRA deduction",                line: "20", value: fmt(taxInput.iraDeduction) },
-    { label: "½ SE tax deduction",                       value: fmt(taxInput.otherAdjustments) },
-    { label: "Senior deduction (65+)",                   value: fmt(4000), isBBB: true, note: "Big Beautiful Bill" },
-    { label: "Car loan interest",                         value: fmt(taxInput.carLoanInterest), isBBB: true, note: "US-made vehicle" },
-  ].filter(r => r.value !== "$0") as CalcRow[] : [];
+    { label: "Student loan interest",     line: "21", value: fmt(taxInput.studentLoanInterest),      note: taxRules ? `max ${fmtAmt(taxRules.studentLoanInterestMax)}` : "max $2,500" },
+    { label: "Educator expenses",         line: "11", value: fmt(taxInput.educatorExpenses),          note: taxRules ? `max ${fmtAmt(taxRules.educatorExpensesMax)}` : "max $300" },
+    { label: "HSA deduction",             line: "13", value: fmt(taxInput.hsaDeduction) },
+    { label: "Self-employed health ins.", line: "17", value: fmt(taxInput.selfEmployedHealthInsurance) },
+    { label: "IRA deduction",             line: "20", value: fmt(taxInput.iraDeduction) },
+    { label: "½ SE tax deduction",                    value: fmt(taxInput.otherAdjustments) },
+    (taxInput.age65OrOlder && taxInput.bigBeautifulBillEnacted)
+      ? { label: "Senior deduction (65+)", value: fmt(seniorAmt), isBBB: true, note: "Big Beautiful Bill" } : null,
+    { label: "Car loan interest",                      value: fmt(taxInput.carLoanInterest), isBBB: true, note: "US-assembled vehicle" },
+  ].filter(r => r !== null && r.value !== "$0") as CalcRow[] : [];
 
   const deductionRows: CalcRow[] = taxInput ? [
     { label: "Mortgage interest",     line: "A-8a", value: fmt(taxInput.mortgageInterest) },
-    { label: "State & local taxes",   line: "A-5",  value: fmt(taxInput.saltPaid),          note: "cap $30K (BBB)", isBBB: !!(taxInput.saltPaid) },
+    { label: "State & local taxes",   line: "A-5",  value: fmt(taxInput.saltPaid),
+      note: taxRules ? `cap ${fmtAmt(saltCapAmt)} (BBB)` : "cap varies by filing status",
+      isBBB: !!(taxInput.saltPaid) },
     { label: "Charitable (cash)",     line: "A-11", value: fmt(taxInput.charitableCash) },
     { label: "Charitable (non-cash)", line: "A-12", value: fmt(taxInput.charitableNonCash) },
     { label: "Medical expenses",      line: "A-1",  value: fmt(taxInput.medicalExpenses),   note: "before 7.5% AGI floor" },
@@ -263,21 +275,21 @@ function Form1040Detail({ result }: { result: Record<string, unknown> }) {
     <div className="space-y-5">
       {/* Result callout */}
       {(refund !== "—" || owed !== "—") && (
-        <div className={`px-4 py-3 rounded-xl border ${refund !== "—" ? "bg-green-500/10 border-green-500/40" : "bg-red-500/10 border-red-500/40"}`}>
-          <p className="text-xs text-slate-400 uppercase tracking-wider">{refund !== "—" ? "Estimated Refund" : "Estimated Amount Owed"}</p>
-          <p className={`text-2xl font-bold font-mono mt-0.5 ${refund !== "—" ? "text-green-300" : "text-red-300"}`}>
+        <div className={`px-4 py-3 rounded-xl border ${refund !== "—" ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+          <p className="text-xs text-gray-400 uppercase tracking-wider">{refund !== "—" ? "Estimated Refund" : "Estimated Amount Owed"}</p>
+          <p className={`text-2xl font-bold font-mono mt-0.5 ${refund !== "—" ? "text-green-700" : "text-red-700"}`}>
             {refund !== "—" ? refund : owed}
           </p>
-          <div className="flex gap-4 mt-2 text-xs text-slate-400">
-            <span>Effective rate: <strong className="text-slate-200">{effRate}</strong></span>
-            <span>Marginal rate: <strong className="text-slate-200">{margRate}</strong></span>
+          <div className="flex gap-4 mt-2 text-xs text-gray-400">
+            <span>Effective rate: <strong className="text-gray-800">{effRate}</strong></span>
+            <span>Marginal rate: <strong className="text-gray-800">{margRate}</strong></span>
           </div>
         </div>
       )}
 
       {/* Calculation waterfall */}
       <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">How We Got Here</p>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">How We Got Here</p>
         <CalcTable rows={[
           { label: "Gross Income",      value: extract(/TOTAL INCOME.*?(\$[\d,]+)/i),  line: "9",  isTotal: true },
           { label: "− Adjustments",     value: `−${extract(/adjustments.*?(\$[\d,]+)/i) || "—"}`, line: "11", indent: true },
@@ -301,7 +313,7 @@ function Form1040Detail({ result }: { result: Record<string, unknown> }) {
       {/* Income breakdown */}
       {incomeRows.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Income Sources</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Income Sources</p>
           <CalcTable rows={incomeRows} />
         </div>
       )}
@@ -309,7 +321,7 @@ function Form1040Detail({ result }: { result: Record<string, unknown> }) {
       {/* Adjustments */}
       {adjRows.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Above-the-Line Adjustments</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Above-the-Line Adjustments</p>
           <CalcTable rows={adjRows} />
           <RefRow ids={["pub590a", "pub590b"]} />
         </div>
@@ -318,43 +330,51 @@ function Form1040Detail({ result }: { result: Record<string, unknown> }) {
       {/* Deductions */}
       {deductionRows.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Itemized Deductions (Schedule A)</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Itemized Deductions (Schedule A)</p>
           <CalcTable rows={deductionRows} />
           <RefRow ids={["schedA"]} />
         </div>
       )}
 
-      {/* Big Beautiful Bill */}
-      <div className="px-3 py-3 rounded-lg bg-amber-500/8 border border-amber-500/30">
+      {/* Big Beautiful Bill — show actual applied provisions from pipeline, fall back to KB overview */}
+      <div className="px-3 py-3 rounded-lg bg-amber-50 border border-amber-200">
         <div className="flex items-center gap-2 mb-2">
           <Zap className="w-4 h-4 text-amber-400" />
-          <p className="text-xs font-semibold text-amber-300">Big Beautiful Bill Provisions Applied</p>
+          <p className="text-xs font-semibold text-amber-700">Big Beautiful Bill Provisions Applied</p>
         </div>
-        <ul className="space-y-1 text-xs text-amber-200 pl-1">
-          <li>⚡ Tip income exclusion — up to $25,000 (verify enacted)</li>
-          <li>⚡ Overtime pay exclusion — up to $12,500 (verify enacted)</li>
-          <li>⚡ Senior deduction $4,000 for age 65+ (verify enacted)</li>
-          <li>⚡ SALT cap raised to $30,000 (verify enacted)</li>
-          <li>⚡ Child Tax Credit raised to $2,500/child (verify enacted)</li>
-          <li>⚡ QBI deduction at 23% instead of 20% (verify enacted)</li>
-          <li>⚡ Car loan interest up to $10,000 for US-made vehicles (verify enacted)</li>
-        </ul>
+        {bbbProvisions.length > 0 ? (
+          <ul className="space-y-1 text-xs text-amber-700 pl-1">
+            {bbbProvisions.map((p, i) => <li key={i}>⚡ {p}</li>)}
+          </ul>
+        ) : taxRules ? (
+          <ul className="space-y-1 text-xs text-amber-700 pl-1">
+            <li>⚡ Tip income exclusion — up to {fmtAmt(taxRules.tipExclusionMax)}</li>
+            <li>⚡ Overtime pay exclusion — up to {fmtAmt(taxRules.overtimeExclusionMax)}</li>
+            <li>⚡ Senior deduction {fmtAmt(taxRules.seniorDeductionAmount)} for age 65+</li>
+            <li>⚡ SALT cap: MFJ {fmtAmt(taxRules.saltCapBBB["mfj"] ?? 40000)}, Single/HOH {fmtAmt(taxRules.saltCapBBB["single"] ?? 20000)}</li>
+            <li>⚡ Child Tax Credit {fmtAmt(taxRules.ctcAmountBBB)}/child (vs {fmtAmt(taxRules.ctcAmountBaseline)} pre-BBB)</li>
+            <li>⚡ QBI deduction at {fmtRate(taxRules.qbiRateBBB)} (vs {fmtRate(taxRules.qbiRateBaseline)} pre-BBB)</li>
+            <li>⚡ Car loan interest up to {fmtAmt(taxRules.carLoanInterestMax)} for US-assembled vehicles</li>
+          </ul>
+        ) : (
+          <p className="text-xs text-amber-700">Loading provisions from knowledge base…</p>
+        )}
         <RefRow ids={["bbb_text", "tc_tips"]} />
       </div>
 
       {/* All IRS references */}
       <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">IRS References</p>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">IRS References</p>
         <RefRow ids={["f1040i", "pub17", "pub525", "schedA", "schedC", "schedD", "schedSE", "pub590a"]} />
       </div>
 
       {/* Full raw form */}
       {form1040Text && (
         <details className="group">
-          <summary className="text-xs text-blue-400 cursor-pointer hover:text-blue-300 select-none">
+          <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-600 select-none">
             View full Form 1040 text ▾
           </summary>
-          <pre className="mt-2 text-[10px] font-mono text-slate-400 whitespace-pre-wrap leading-relaxed bg-slate-950 p-3 rounded border border-slate-800 max-h-96 overflow-auto">
+          <pre className="mt-2 text-[10px] font-mono text-gray-400 whitespace-pre-wrap leading-relaxed bg-gray-50 p-3 rounded border border-gray-100 max-h-96 overflow-auto">
             {form1040Text}
           </pre>
         </details>
@@ -371,31 +391,31 @@ function FindCPADetail({ result }: { result: Record<string, unknown> }) {
   return (
     <div className="space-y-3">
       {noLocationNote && (
-        <div className="flex items-start gap-2 px-3 py-2.5 rounded bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
+        <div className="flex items-start gap-2 px-3 py-2.5 rounded bg-amber-50 border border-amber-200 text-xs text-amber-700">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />
           <span>{noLocationNote}</span>
         </div>
       )}
 
-      <p className="text-sm text-slate-300">{cpas.length} tax professionals found</p>
+      <p className="text-sm text-gray-600">{cpas.length} tax professionals found</p>
       {cpas.map((cpa, i) => (
-        <div key={i} className="px-3 py-2.5 rounded border border-slate-700 bg-slate-800/60 text-xs space-y-1">
+        <div key={i} className="px-3 py-2.5 rounded border border-gray-200 bg-gray-50 text-xs space-y-1">
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-slate-200">{cpa.name}</span>
-            <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">{cpa.type}</span>
+            <span className="font-semibold text-gray-800">{cpa.name}</span>
+            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">{cpa.type}</span>
           </div>
           {cpa.rating    && <p className="text-amber-400">⭐ {cpa.rating}</p>}
           {cpa.estimatedPrice && <p className="text-green-400 font-mono">💰 {cpa.estimatedPrice}</p>}
-          {cpa.specialties?.length > 0 && <p className="text-slate-400">🎯 {cpa.specialties.join(", ")}</p>}
-          {cpa.phone     && <p className="text-blue-400 font-mono">📞 {cpa.phone}</p>}
+          {cpa.specialties?.length > 0 && <p className="text-gray-400">🎯 {cpa.specialties.join(", ")}</p>}
+          {cpa.phone     && <p className="text-blue-600 font-mono">📞 {cpa.phone}</p>}
         </div>
       ))}
 
       <div>
-        <p className="text-xs font-semibold text-slate-400 mb-1.5">IRS References</p>
+        <p className="text-xs font-semibold text-gray-400 mb-1.5">IRS References</p>
         {irsDirectoryUrl && (
           <a href={irsDirectoryUrl} target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs hover:bg-blue-500/20 transition-colors mb-1.5">
+            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 border border-blue-200 text-blue-600 text-xs hover:bg-blue-100 transition-colors mb-1.5">
             IRS Tax Pro Directory <ExternalLink className="w-2.5 h-2.5" />
           </a>
         )}
@@ -417,33 +437,33 @@ function SendSMSDetail({ result }: { result: Record<string, unknown> }) {
   if (twilioMissing) {
     return (
       <div className="space-y-4">
-        <div className="flex items-start gap-2 px-3 py-3 rounded bg-amber-500/10 border border-amber-500/30 text-sm text-amber-200">
+        <div className="flex items-start gap-2 px-3 py-3 rounded bg-amber-50 border border-amber-200 text-sm text-amber-700">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold mb-1">SMS not sent — Twilio not configured</p>
-            <p className="text-xs text-amber-300/80">Your tax summary has been saved as a snapshot file instead.</p>
+            <p className="text-xs text-amber-700/80">Your tax summary has been saved as a snapshot file instead.</p>
           </div>
         </div>
 
         {snapshotFile && (
           <div className="text-xs">
-            <p className="font-semibold text-slate-400 mb-1">Snapshot saved to:</p>
-            <code className="block px-2 py-1.5 bg-slate-800 rounded border border-slate-700 text-green-300 font-mono break-all">{snapshotFile}</code>
+            <p className="font-semibold text-gray-400 mb-1">Snapshot saved to:</p>
+            <code className="block px-2 py-1.5 bg-gray-50 rounded border border-gray-200 text-green-700 font-mono break-all">{snapshotFile}</code>
           </div>
         )}
 
         {setupAction && (
-          <div className="px-3 py-2.5 rounded bg-blue-500/10 border border-blue-500/30 text-xs text-blue-300">
+          <div className="px-3 py-2.5 rounded bg-blue-50 border border-blue-200 text-xs text-blue-600">
             <span className="font-semibold">To enable SMS:</span> {setupAction}
           </div>
         )}
 
         {smsText && (
           <details className="group">
-            <summary className="text-xs text-blue-400 cursor-pointer hover:text-blue-300 select-none">
+            <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-600 select-none">
               View SMS snapshot content ▾
             </summary>
-            <pre className="mt-2 text-[10px] font-mono text-slate-300 whitespace-pre-wrap leading-relaxed bg-slate-950 p-3 rounded border border-slate-800 max-h-80 overflow-auto">
+            <pre className="mt-2 text-[10px] font-mono text-gray-600 whitespace-pre-wrap leading-relaxed bg-gray-50 p-3 rounded border border-gray-100 max-h-80 overflow-auto">
               {smsText}
             </pre>
           </details>
@@ -455,21 +475,21 @@ function SendSMSDetail({ result }: { result: Record<string, unknown> }) {
   // Sent (or failed to send)
   return (
     <div className="space-y-3">
-      <div className={`flex items-center gap-2 px-3 py-3 rounded border text-sm ${success ? "bg-green-500/10 border-green-500/40 text-green-300" : "bg-red-500/10 border-red-500/40 text-red-300"}`}>
+      <div className={`flex items-center gap-2 px-3 py-3 rounded border text-sm ${success ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"}`}>
         {success ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
         {success ? `Sent ${ids.length} message${ids.length !== 1 ? "s" : ""}` : (result.error as string ?? "Failed")}
       </div>
       {ids.length > 0 && (
-        <div className="text-xs font-mono text-slate-400 space-y-0.5">
-          {ids.map((id, i) => <div key={i} className="px-2 py-1 bg-slate-800 rounded">Msg {i + 1}: {id}</div>)}
+        <div className="text-xs font-mono text-gray-400 space-y-0.5">
+          {ids.map((id, i) => <div key={i} className="px-2 py-1 bg-gray-50 rounded">Msg {i + 1}: {id}</div>)}
         </div>
       )}
       {smsText && (
         <details className="group">
-          <summary className="text-xs text-blue-400 cursor-pointer hover:text-blue-300 select-none">
+          <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-600 select-none">
             View sent message content ▾
           </summary>
-          <pre className="mt-2 text-[10px] font-mono text-slate-300 whitespace-pre-wrap leading-relaxed bg-slate-950 p-3 rounded border border-slate-800 max-h-80 overflow-auto">
+          <pre className="mt-2 text-[10px] font-mono text-gray-600 whitespace-pre-wrap leading-relaxed bg-gray-50 p-3 rounded border border-gray-100 max-h-80 overflow-auto">
             {smsText}
           </pre>
         </details>
@@ -486,15 +506,15 @@ function HumanInputDetail({ result }: { result: Record<string, unknown> }) {
   return (
     <div className="space-y-3">
       {question && (
-        <div className="px-3 py-3 rounded bg-amber-500/10 border border-amber-500/30">
+        <div className="px-3 py-3 rounded bg-amber-50 border border-amber-200">
           <p className="text-xs font-semibold text-amber-400 mb-1">Question asked</p>
-          <p className="text-sm text-slate-200">{question}</p>
+          <p className="text-sm text-gray-800">{question}</p>
         </div>
       )}
       {answer && (
-        <div className="px-3 py-3 rounded bg-green-500/10 border border-green-500/30">
+        <div className="px-3 py-3 rounded bg-green-50 border border-green-500/30">
           <p className="text-xs font-semibold text-green-400 mb-1">Your answer</p>
-          <p className="text-sm text-slate-200 font-medium">{answer}</p>
+          <p className="text-sm text-gray-800 font-medium">{answer}</p>
         </div>
       )}
     </div>
@@ -539,28 +559,28 @@ export function StepDetail({ step, onClose }: StepDetailProps) {
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="fixed inset-y-0 right-0 w-[520px] max-w-full bg-slate-900 border-l border-slate-700 shadow-2xl z-50 flex flex-col">
+      <div className="fixed inset-y-0 right-0 w-[520px] max-w-full bg-white border-l border-gray-200 shadow-2xl z-50 flex flex-col">
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-700 shrink-0">
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200 shrink-0">
           <div className="flex items-start gap-3">
             <div className={`mt-0.5 p-2 rounded-lg ${
               step.status === "complete" ? "bg-green-500/20 text-green-400" :
               step.status === "error"    ? "bg-red-500/20 text-red-400" :
               step.isHumanInput          ? "bg-amber-500/20 text-amber-400" :
-              step.status === "running"  ? "bg-blue-500/20 text-blue-400" :
-              "bg-slate-700 text-slate-400"
+              step.status === "running"  ? "bg-blue-50 text-blue-600" :
+              "bg-gray-100 text-gray-400"
             }`}>
               {stepIcon(step.stepId)}
             </div>
             <div>
-              <h2 className="font-semibold text-slate-100">{step.label}</h2>
-              <p className="text-xs text-slate-400 mt-0.5">{STEP_DESC[step.stepId] ?? step.label}</p>
+              <h2 className="font-semibold text-gray-900">{step.label}</h2>
+              <p className="text-xs text-gray-400 mt-0.5">{STEP_DESC[step.stepId] ?? step.label}</p>
               {step.durationMs !== undefined && step.durationMs > 0 && (
-                <p className="text-xs text-slate-500 mt-1">Completed in {(step.durationMs / 1000).toFixed(2)}s</p>
+                <p className="text-xs text-gray-400 mt-1">Completed in {(step.durationMs / 1000).toFixed(2)}s</p>
               )}
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-slate-700 text-slate-400 shrink-0 transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 shrink-0 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -568,10 +588,10 @@ export function StepDetail({ step, onClose }: StepDetailProps) {
         {/* Body */}
         <div className="flex-1 overflow-auto px-5 py-4">
           {step.status === "waiting" && (
-            <p className="text-sm text-slate-500">This step has not run yet.</p>
+            <p className="text-sm text-gray-400">This step has not run yet.</p>
           )}
           {step.status === "error" && (
-            <div className="mb-4 px-3 py-3 rounded bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+            <div className="mb-4 px-3 py-3 rounded bg-red-50 border border-red-200 text-sm text-red-700">
               <p className="font-semibold mb-1">Error</p>
               <p className="font-mono text-xs">{step.error}</p>
             </div>

@@ -1,17 +1,20 @@
 import { useState } from "react";
 import {
   LayoutDashboard, FileText, FolderOpen, Users, Settings,
-  Zap, Bell, HelpCircle, Search,
+  Zap, Bell, HelpCircle, Search, History, Bot,
 } from "lucide-react";
 import { usePipelineStore } from "../store/pipeline";
+import type { RunHistory } from "../types/pipeline";
 
-type AppTab = "pipeline" | "form1040" | "documents" | "cpa" | "setup" | "history" | "sms" | "editor";
+type AppTab = "pipeline" | "form1040" | "documents" | "cpa" | "setup" | "history" | "sms" | "editor" | "bot";
 
 const NAV_ITEMS: { id: AppTab; label: string; Icon: React.ElementType }[] = [
   { id: "pipeline",  label: "Dashboard",  Icon: LayoutDashboard },
   { id: "form1040",  label: "Form 1040",  Icon: FileText },
   { id: "documents", label: "Documents",  Icon: FolderOpen },
-  { id: "cpa",       label: "CPAs",       Icon: Users },
+  { id: "cpa",       label: "Tax Pros",   Icon: Users },
+  { id: "bot",       label: "Assistant",  Icon: Bot },
+  { id: "history",   label: "History",    Icon: History },
   { id: "setup",     label: "Settings",   Icon: Settings },
 ];
 
@@ -96,20 +99,30 @@ function Sidebar() {
 
 // ── Top bar ───────────────────────────────────────────────────────────────────
 
-function TopBar({ title, subtitle }: { title?: string; subtitle?: string }) {
-  const { config } = usePipelineStore();
+function TopBar({ title, subtitle, onHistorySearch }: {
+  title?: string;
+  subtitle?: string;
+  onHistorySearch?: (q: string) => void;
+}) {
+  const { config, activeTab } = usePipelineStore();
   const year = config?.taxYear ?? 2025;
+  const showSearch = activeTab === "history" && onHistorySearch;
 
   return (
     <header className="h-14 border-b border-gray-100 bg-white flex items-center gap-4 px-6 shrink-0">
-      {/* Search */}
-      <div className="flex items-center gap-2 flex-1 max-w-xs bg-gray-50 rounded-lg border border-gray-100 px-3 py-2">
-        <Search style={{ width: 14, height: 14 }} className="text-gray-400" />
-        <input
-          placeholder={title ? `Search ${title.toLowerCase()}…` : "Search tax entities…"}
-          className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-full"
-        />
-      </div>
+      {/* Search — only on History page */}
+      {showSearch ? (
+        <div className="flex items-center gap-2 flex-1 max-w-xs bg-gray-50 rounded-lg border border-gray-100 px-3 py-2 focus-within:border-blue-300 focus-within:ring-1 focus-within:ring-blue-300 transition-all">
+          <Search style={{ width: 14, height: 14 }} className="text-gray-400 shrink-0" />
+          <input
+            placeholder="Search run history…"
+            onChange={e => onHistorySearch(e.target.value)}
+            className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-full"
+          />
+        </div>
+      ) : (
+        <div className="flex-1" />
+      )}
 
       {/* Tax year tab */}
       <div className="border-b-2 border-blue-600 pb-0.5 px-1">
@@ -142,14 +155,15 @@ interface AppShellProps {
   children: React.ReactNode;
   pageTitle?: string;
   pageSubtitle?: string;
+  onHistorySearch?: (q: string) => void;
 }
 
-export function AppShell({ children, pageTitle, pageSubtitle }: AppShellProps) {
+export function AppShell({ children, pageTitle, pageSubtitle, onHistorySearch }: AppShellProps) {
   return (
     <div className="flex min-h-screen bg-gray-50 font-['Inter',system-ui,sans-serif]">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar title={pageTitle} subtitle={pageSubtitle} />
+        <TopBar title={pageTitle} subtitle={pageSubtitle} onHistorySearch={onHistorySearch} />
         <main className="flex-1 overflow-auto p-6">
           {children}
         </main>

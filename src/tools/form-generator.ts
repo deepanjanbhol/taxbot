@@ -7,6 +7,7 @@
 
 import type { FilingStatus, TaxSummary } from "../utils/tax-calculator.js";
 import { computeFullTax, fmtDollar } from "../utils/tax-calculator.js";
+import { TAX_RULES, BBB_RULES, IRS_LIMITS, getSaltCap, getCTCPerChild } from "../utils/tax-rules-loader.js";
 
 export interface TaxInputData {
   // Taxpayer info
@@ -80,13 +81,30 @@ export interface TaxInputData {
   isUsMadeVehicle: boolean;
 }
 
-/** Compute how much SS income is taxable (provisional income test). */
-function taxableSocialSecurity(ssBenefits: number, agi_beforeSS: number, interest: number): number {
+/** Compute how much SS income is taxable (provisional income test).
+ *  Thresholds are filing-status-specific — loaded from knowledge-base/rules/tax-year-2025.json.
+ *  MFJ has higher thresholds ($32K/$44K vs $25K/$34K for single/HOH/MFS).
+ */
+function taxableSocialSecurity(
+  ssBenefits: number,
+  agi_beforeSS: number,
+  interest: number,
+  status: FilingStatus,
+): number {
+  const ss          = TAX_RULES.socialSecurity;
+  const isMfj       = status === "mfj";
+  const tier1       = isMfj ? ss.tier1ThresholdMfj : ss.tier1ThresholdSingle;
+  const tier2       = isMfj ? ss.tier2ThresholdMfj : ss.tier2ThresholdSingle;
+  const rate1       = ss.tier1TaxableRate;
+  const rate2       = ss.tier2TaxableRate;
+
   const provisional = agi_beforeSS + interest + ssBenefits * 0.5;
 
-  if (provisional <= 25_000) return 0;
-  if (provisional <= 34_000) return Math.min(ssBenefits * 0.5, (provisional - 25_000) * 0.5);
-  return Math.min(ssBenefits * 0.85, 4_500 + (provisional - 34_000) * 0.85);
+  if (provisional <= tier1) return 0;
+  if (provisional <= tier2) return Math.min(ssBenefits * rate1, (provisional - tier1) * rate1);
+
+  const maxTier1    = (tier2 - tier1) * rate1;
+  return Math.min(ssBenefits * rate2, maxTier1 + (provisional - tier2) * rate2);
 }
 
 /** Format the complete Form 1040 as a readable text document. */
@@ -110,27 +128,31 @@ export function generateForm1040(input: TaxInputData): string {
     hasCarLoan, carLoanInterest, isUsMadeVehicle,
   } = input;
 
-  // Big Beautiful Bill adjustments
-  const excludedTips = (receivedTips && bigBeautifulBillEnacted) ? Math.min(tipIncome, 25_000) : 0;
-  const excludedOvertime = (receivedOvertime && bigBeautifulBillEnacted) ? Math.min(overtimePay, 12_500) : 0;
-  const seniorDeduction = (age65OrOlder && bigBeautifulBillEnacted) ? 4_000 : 0;
+  // Big Beautiful Bill adjustments — amounts from knowledge-base/rules/big-beautiful-bill.json
+  const bbb = BBB_RULES.provisions;
+  const excludedTips     = (receivedTips     && bigBeautifulBillEnacted) ? Math.min(tipIncome,    bbb.tipIncomeExclusion.maxExclusion)       : 0;
+  const excludedOvertime = (receivedOvertime && bigBeautifulBillEnacted) ? Math.min(overtimePay,  bbb.overtimeExclusion.maxExclusion)         : 0;
+  const seniorDeduction  = (age65OrOlder     && bigBeautifulBillEnacted) ? bbb.seniorDeduction.amount                                         : 0;
   const carLoanDeduction = (hasCarLoan && isUsMadeVehicle && bigBeautifulBillEnacted)
-    ? Math.min(carLoanInterest, 10_000) : 0;
-  const saltCap = bigBeautifulBillEnacted ? 30_000 : 10_000;
+    ? Math.min(carLoanInterest, bbb.carLoanInterestDeduction.maxDeduction) : 0;
+  const saltCap = getSaltCap(filingStatus, bigBeautifulBillEnacted);
 
   // Adjusted wage income
   const taxableWages = wages + Math.max(0, tipIncome - excludedTips) + Math.max(0, overtimePay - excludedOvertime);
 
   // Social Security taxability (rough calc)
-  const agiBeforeSS = taxableWages + interest + ordinaryDividends + ltcg + stcg +
+  // Net capital gain for income purposes (losses capped at -$3K per Schedule D)
+  const netCGForIncome = (ltcg + stcg) < 0 ? Math.max(ltcg + stcg, -3000) : (ltcg + stcg);
+  const agiBeforeSS = taxableWages + interest + ordinaryDividends + netCGForIncome +
     businessIncome + rentalIncome + unemploymentComp + retirementDist + otherIncome;
-  const taxableSS = taxableSocialSecurity(socialSecurity, agiBeforeSS, interest);
+  const taxableSS = taxableSocialSecurity(socialSecurity, agiBeforeSS, interest, filingStatus);
 
   // Gross income
   const totalWages       = taxableWages;
   const totalInterest    = interest;
   const totalDividends   = ordinaryDividends;
-  const totalCapGains    = ltcg + stcg;
+  const netCGDisplay     = ltcg + stcg;  // signed; display full net (form shows before -$3K cap)
+  const totalCapGains    = netCGDisplay;
   const totalOtherIncome = taxableSS + retirementDist + unemploymentComp + royaltyIncome + otherIncome;
   const grossIncome      = totalWages + totalInterest + totalDividends + totalCapGains +
                            businessIncome + rentalIncome + totalOtherIncome;
@@ -149,8 +171,8 @@ export function generateForm1040(input: TaxInputData): string {
   const totalItemized = mortgageInterest + cappedSalt + charitableCash + charitableNonCash +
                         medAfterFloor;
 
-  // Computed CTC
-  const ctcPerChild = bigBeautifulBillEnacted ? 2_500 : 2_000;
+  // Computed CTC — amount from knowledge-base/rules/big-beautiful-bill.json
+  const ctcPerChild = getCTCPerChild(bigBeautifulBillEnacted);
   const computedCTC  = dependentsUnder17 * ctcPerChild;
   const otherDepCredit = otherDependents * 500;
   const totalCredits = computedCTC + otherDepCredit + childCareCredit + educationCredit +
@@ -164,6 +186,7 @@ export function generateForm1040(input: TaxInputData): string {
     dividends: totalDividends,
     qualifiedDividends,
     ltcg,
+    stcg,
     businessIncome,
     rentalIncome,
     otherIncome: totalOtherIncome,
@@ -213,7 +236,9 @@ ${excludedOvertime > 0 ? line("    (Excluded overtime pay)", fmtDollar(-excluded
 ${line("2b  Taxable interest", fmtDollar(totalInterest))}
 ${line("3a  Qualified dividends", fmtDollar(qualifiedDividends))}
 ${line("3b  Ordinary dividends", fmtDollar(totalDividends))}
-${line("7   Capital gain or (loss)", fmtDollar(totalCapGains))}
+${line("7   Capital gain or (loss)", fmtDollar(tax.capitalGainLine7), totalCapGains < -3000 ? `capped; $${Math.abs(totalCapGains + 3000).toLocaleString()} carries to 2026` : "")}
+${stcg < 0 || ltcg < 0 ? line("    (Net ST gain/loss)", fmtDollar(stcg), "Schedule D") : ""}
+${stcg < 0 || ltcg < 0 ? line("    (Net LT gain/loss)", fmtDollar(ltcg), "Schedule D") : ""}
 ${businessIncome !== 0 ? line("Sch C  Business income (loss)", fmtDollar(businessIncome)) : ""}
 ${rentalIncome !== 0 ? line("Sch E  Rental / partnership income", fmtDollar(rentalIncome)) : ""}
 ${royaltyIncome > 0 ? line("       Royalties (1099-MISC Box 2)", fmtDollar(royaltyIncome)) : ""}

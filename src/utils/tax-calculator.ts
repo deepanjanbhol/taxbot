@@ -1,74 +1,43 @@
 /**
  * tax-calculator.ts
  * Core tax computation functions for tax year 2025.
+ *
+ * All tax rules (brackets, deductions, limits) are loaded from
+ * knowledge-base/rules/ at startup — NOT hardcoded here.
+ * To update a rule, edit the relevant JSON file and restart.
  */
+
+import {
+  TAX_RULES, BBB_RULES,
+  normalizeBrackets, normalizeLtcg, getQBIRate,
+} from "./tax-rules-loader.js";
 
 export interface TaxBracket {
   rate: number;
   min: number;
-  max: number; // Infinity for top bracket
+  max: number;
 }
 
-// 2025 tax brackets
-const BRACKETS_2025: Record<string, TaxBracket[]> = {
-  single: [
-    { rate: 0.10, min: 0,       max: 11_925 },
-    { rate: 0.12, min: 11_925,  max: 48_475 },
-    { rate: 0.22, min: 48_475,  max: 103_350 },
-    { rate: 0.24, min: 103_350, max: 197_300 },
-    { rate: 0.32, min: 197_300, max: 250_525 },
-    { rate: 0.35, min: 250_525, max: 626_350 },
-    { rate: 0.37, min: 626_350, max: Infinity },
-  ],
-  mfj: [
-    { rate: 0.10, min: 0,       max: 23_850 },
-    { rate: 0.12, min: 23_850,  max: 96_950 },
-    { rate: 0.22, min: 96_950,  max: 206_700 },
-    { rate: 0.24, min: 206_700, max: 394_600 },
-    { rate: 0.32, min: 394_600, max: 501_050 },
-    { rate: 0.35, min: 501_050, max: 751_600 },
-    { rate: 0.37, min: 751_600, max: Infinity },
-  ],
-  hoh: [
-    { rate: 0.10, min: 0,       max: 17_000 },
-    { rate: 0.12, min: 17_000,  max: 64_850 },
-    { rate: 0.22, min: 64_850,  max: 103_350 },
-    { rate: 0.24, min: 103_350, max: 197_300 },
-    { rate: 0.32, min: 197_300, max: 250_500 },
-    { rate: 0.35, min: 250_500, max: 626_350 },
-    { rate: 0.37, min: 626_350, max: Infinity },
-  ],
-  mfs: [
-    { rate: 0.10, min: 0,       max: 11_925 },
-    { rate: 0.12, min: 11_925,  max: 48_475 },
-    { rate: 0.22, min: 48_475,  max: 103_350 },
-    { rate: 0.24, min: 103_350, max: 197_300 },
-    { rate: 0.32, min: 197_300, max: 250_525 },
-    { rate: 0.35, min: 250_525, max: 313_175 },
-    { rate: 0.37, min: 313_175, max: Infinity },
-  ],
-};
+// Derived at module init from KB — same shape the rest of the file uses
+const BRACKETS = Object.fromEntries(
+  Object.entries(TAX_RULES.ordinaryIncomeBrackets).map(
+    ([status, brackets]) => [status, normalizeBrackets(brackets)]
+  )
+) as Record<string, TaxBracket[]>;
 
-const STANDARD_DEDUCTIONS_2025: Record<string, number> = {
-  single: 15_000,
-  mfj:    30_000,
-  mfs:    15_000,
-  hoh:    22_500,
-};
+const STANDARD_DEDUCTIONS = TAX_RULES.standardDeductions as Record<string, number>;
 
-// Long-term capital gains brackets 2025
-const LTCG_BRACKETS_2025: Record<string, Array<{ rate: number; max: number }>> = {
-  single: [{ rate: 0,    max: 48_350 }, { rate: 0.15, max: 533_400 }, { rate: 0.20, max: Infinity }],
-  mfj:    [{ rate: 0,    max: 96_700 }, { rate: 0.15, max: 600_050 }, { rate: 0.20, max: Infinity }],
-  hoh:    [{ rate: 0,    max: 64_750 }, { rate: 0.15, max: 566_700 }, { rate: 0.20, max: Infinity }],
-  mfs:    [{ rate: 0,    max: 48_350 }, { rate: 0.15, max: 300_000 }, { rate: 0.20, max: Infinity }],
-};
+const LTCG_BRACKETS = Object.fromEntries(
+  Object.entries(TAX_RULES.ltcgBrackets).map(
+    ([status, brackets]) => [status, normalizeLtcg(brackets)]
+  )
+) as Record<string, Array<{ rate: number; max: number }>>;
 
 export type FilingStatus = "single" | "mfj" | "mfs" | "hoh";
 
 /** Compute ordinary income tax from tax tables. */
 export function computeOrdinaryTax(taxableIncome: number, status: FilingStatus): number {
-  const brackets = BRACKETS_2025[status];
+  const brackets = BRACKETS[status];
   let tax = 0;
   for (const b of brackets) {
     if (taxableIncome <= b.min) break;
@@ -80,7 +49,7 @@ export function computeOrdinaryTax(taxableIncome: number, status: FilingStatus):
 
 /** Get the marginal rate for a given income level. */
 export function getMarginalRate(taxableIncome: number, status: FilingStatus): number {
-  const brackets = BRACKETS_2025[status];
+  const brackets = BRACKETS[status];
   for (const b of [...brackets].reverse()) {
     if (taxableIncome > b.min) return b.rate;
   }
@@ -89,16 +58,16 @@ export function getMarginalRate(taxableIncome: number, status: FilingStatus): nu
 
 /** Compute LTCG tax. */
 export function computeLtcgTax(ltcgAmount: number, ordinaryIncome: number, status: FilingStatus): number {
-  const brackets = LTCG_BRACKETS_2025[status];
+  const brackets = LTCG_BRACKETS[status];
   let tax = 0;
-  let stackedIncome = ordinaryIncome; // LTCG stacks on top of ordinary income
+  let stackedIncome = ordinaryIncome;
 
   for (const b of brackets) {
-    if (stackedIncome >= b.max) continue; // already past this bracket
+    if (stackedIncome >= b.max) continue;
     const roomInBracket = b.max - stackedIncome;
-    const taxableHere = Math.min(ltcgAmount, roomInBracket);
+    const taxableHere   = Math.min(ltcgAmount, roomInBracket);
     tax += taxableHere * b.rate;
-    ltcgAmount -= taxableHere;
+    ltcgAmount   -= taxableHere;
     stackedIncome = b.max;
     if (ltcgAmount <= 0) break;
   }
@@ -107,44 +76,43 @@ export function computeLtcgTax(ltcgAmount: number, ordinaryIncome: number, statu
 
 /** Self-employment tax calculation. */
 export function computeSETax(netSEIncome: number): { seTax: number; deductibleHalf: number } {
-  const ssWageBase2025 = 176_100;
-  const adjustedNetSE = netSEIncome * 0.9235; // net SE income for SE tax base
+  const { ssWageBase, ssRate, medicareRate, additionalMedicareRate,
+          additionalMedicareThreshold, netEarningsMultiplier } = TAX_RULES.seTax;
 
-  const ssTax = Math.min(adjustedNetSE, ssWageBase2025) * 0.124;
-  const medicareTax = adjustedNetSE * 0.029;
-  const additionalMedicare = Math.max(0, adjustedNetSE - 200_000) * 0.009;
+  const adjustedNetSE = netSEIncome * netEarningsMultiplier;
+  const ssTax         = Math.min(adjustedNetSE, ssWageBase) * ssRate;
+  const medicareTax   = adjustedNetSE * medicareRate;
+  const addlMedicare  = Math.max(0, adjustedNetSE - additionalMedicareThreshold) * additionalMedicareRate;
 
-  const seTax = ssTax + medicareTax + additionalMedicare;
+  const seTax = ssTax + medicareTax + addlMedicare;
   return {
-    seTax: Math.round(seTax * 100) / 100,
-    deductibleHalf: Math.round((seTax / 2) * 100) / 100,
+    seTax:           Math.round(seTax * 100) / 100,
+    deductibleHalf:  Math.round((seTax / 2) * 100) / 100,
   };
 }
 
 /** Net Investment Income Tax (3.8% on investment income above threshold). */
 export function computeNIIT(investmentIncome: number, agi: number, status: FilingStatus): number {
-  const threshold = status === "mfj" ? 250_000 : status === "mfs" ? 125_000 : 200_000;
-  const excessAGI = Math.max(0, agi - threshold);
-  const niitBase = Math.min(investmentIncome, excessAGI);
-  return Math.round(niitBase * 0.038 * 100) / 100;
+  const threshold  = TAX_RULES.niit.thresholds[status as keyof typeof TAX_RULES.niit.thresholds];
+  const excessAGI  = Math.max(0, agi - threshold);
+  const niitBase   = Math.min(investmentIncome, excessAGI);
+  return Math.round(niitBase * TAX_RULES.niit.rate * 100) / 100;
 }
 
-/** QBI deduction (20% or 23% with Big Beautiful Bill). */
+/** QBI deduction (rate from KB — 20% baseline, 23% under BBB). */
 export function computeQBIDeduction(
   qbi: number,
   taxableIncomeBeforeQBI: number,
   status: FilingStatus,
-  bigBeautifulBillEnacted = false
+  bigBeautifulBillEnacted = true
 ): number {
-  const rate = bigBeautifulBillEnacted ? 0.23 : 0.20;
-  const phaseOutThreshold = status === "mfj" ? 383_900 : 191_950;
+  const rate             = getQBIRate(bigBeautifulBillEnacted);
+  const phaseOutThreshold = TAX_RULES.qbi.phaseOutThresholds[status as keyof typeof TAX_RULES.qbi.phaseOutThresholds];
 
-  // Simplified: full deduction below threshold
   if (taxableIncomeBeforeQBI <= phaseOutThreshold) {
     return Math.min(qbi * rate, taxableIncomeBeforeQBI * rate);
   }
-
-  // Above threshold: limited to 50% of W-2 wages (simplified — real calc needs W-2 wages)
+  // Above threshold: limited to 50% of W-2 wages (simplified)
   return Math.min(qbi * rate, taxableIncomeBeforeQBI * rate);
 }
 
@@ -169,9 +137,13 @@ export interface TaxSummary {
   withholding: number;
   estimatedPayments: number;
   totalPayments: number;
-  refundOrOwed: number; // positive = refund, negative = owed
+  refundOrOwed: number;
   effectiveRate: number;
   marginalRate: number;
+  /** Net capital gain/loss on Form 1040 line 7 (losses capped at -$3,000) */
+  capitalGainLine7: number;
+  /** Capital loss carryforward to future years (0 if gain or loss ≤ $3,000) */
+  capitalLossCarryforward: number;
 }
 
 /** Full tax summary computation. */
@@ -182,12 +154,14 @@ export function computeFullTax(params: {
   dividends: number;
   qualifiedDividends: number;
   ltcg: number;
-  businessIncome: number;    // Schedule C net
-  rentalIncome: number;      // Schedule E net
+  /** Net short-term capital gains/losses (may be negative). Defaults to 0. */
+  stcg?: number;
+  businessIncome: number;
+  rentalIncome: number;
   otherIncome: number;
-  adjustments: number;       // IRA, SE tax half, HSA, etc.
+  adjustments: number;
   itemizedDeductions: number;
-  qbi: number;               // qualified business income
+  qbi: number;
   credits: number;
   withholding: number;
   estimatedPayments: number;
@@ -196,46 +170,65 @@ export function computeFullTax(params: {
   const {
     filingStatus: status,
     wages, interest, dividends, qualifiedDividends, ltcg,
+    stcg = 0,
     businessIncome, rentalIncome, otherIncome,
     adjustments, itemizedDeductions, qbi, credits,
     withholding, estimatedPayments,
-    bigBeautifulBillEnacted = false,
+    bigBeautifulBillEnacted = BBB_RULES.enacted,
   } = params;
 
-  // SE tax applies to net self-employment income (Schedule C / 1099-NEC).
-  // Passive rental income (Schedule E) is NOT subject to SE tax for most taxpayers.
-  // If rentalIncome > 0 and businessIncome == 0, SE tax is still only on businessIncome.
   const { seTax, deductibleHalf } = computeSETax(Math.max(0, businessIncome));
   const totalAdjustments = adjustments + deductibleHalf;
 
-  // Gross income
-  const grossIncome = wages + interest + dividends + ltcg + businessIncome + rentalIncome + otherIncome;
-  const agi = Math.max(0, grossIncome - totalAdjustments);
+  // ── Capital gain/loss netting per IRS Schedule D ──────────────────────────
+  // stcg and ltcg may both be negative (capital losses)
+  const netST = stcg;
+  const netLT = ltcg;
+  const netCG = netST + netLT;
 
-  // Deductions
-  const standardDeduction = STANDARD_DEDUCTIONS_2025[status];
-  const deductionUsed = Math.max(standardDeduction, itemizedDeductions);
+  // Form 1040 line 7: capital gain or loss (net losses capped at -$3,000/year)
+  const capitalGainLine7 = netCG < 0 ? Math.max(netCG, -3000) : netCG;
+  const capitalLossCarryforward = netCG < 0 ? Math.max(0, -netCG - 3000) : 0;
 
-  // QBI
+  // Preferential LTCG portion: only net LT gains (after ST loss offset) are taxed at 0/15/20%
+  // ST gains (or the portion not sheltered by LT gains) are taxed at ordinary rates
+  let preferredLTCG = 0;
+  if (netCG > 0) {
+    if (netST < 0) {
+      // ST loss offsets LT gain; remaining net is still preferential LT
+      preferredLTCG = netCG;
+    } else {
+      // Both positive — only the LT portion gets preferential treatment
+      preferredLTCG = Math.max(0, netLT);
+    }
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
+  const grossIncome = wages + interest + dividends + capitalGainLine7 + businessIncome + rentalIncome + otherIncome;
+  const agi         = Math.max(0, grossIncome - totalAdjustments);
+
+  const standardDeduction = STANDARD_DEDUCTIONS[status];
+  if (standardDeduction === undefined) throw new Error(`[tax-calculator] No standard deduction configured for filing status: "${status}". Check knowledge-base/rules/tax-year-2025.json`);
+  const deductionUsed     = Math.max(standardDeduction, itemizedDeductions);
+
   const taxableBeforeQBI = Math.max(0, agi - deductionUsed);
-  const qbiDeduction = computeQBIDeduction(qbi, taxableBeforeQBI, status, bigBeautifulBillEnacted);
+  const qbiDeduction     = computeQBIDeduction(qbi, taxableBeforeQBI, status, bigBeautifulBillEnacted);
+  const taxableIncome    = Math.max(0, taxableBeforeQBI - qbiDeduction);
 
-  const taxableIncome = Math.max(0, taxableBeforeQBI - qbiDeduction);
+  // Ordinary income = taxable income minus the preferential portions (LTCG + qualified divs)
+  const ordinaryIncome = Math.max(0, taxableIncome - qualifiedDividends - preferredLTCG);
+  const ordinaryTax    = computeOrdinaryTax(ordinaryIncome, status);
+  const ltcgTax        = computeLtcgTax(qualifiedDividends + preferredLTCG, ordinaryIncome, status);
 
-  // Ordinary income (excludes qualified divs and LTCG from top brackets)
-  const ordinaryIncome = Math.max(0, taxableIncome - qualifiedDividends - ltcg);
-  const ordinaryTax = computeOrdinaryTax(ordinaryIncome, status);
-  const ltcgTax = computeLtcgTax(qualifiedDividends + ltcg, ordinaryIncome, status);
+  // NIIT base uses net capital gain (same as line 7, already limited to -$3K)
+  const investmentIncome = Math.max(0, interest + dividends + capitalGainLine7 + rentalIncome);
+  const niit             = computeNIIT(investmentIncome, agi, status);
 
-  // NIIT
-  const investmentIncome = interest + dividends + ltcg + rentalIncome;
-  const niit = computeNIIT(investmentIncome, agi, status);
-
-  const totalTax = ordinaryTax + ltcgTax + seTax + niit;
+  const totalTax            = ordinaryTax + ltcgTax + seTax + niit;
   const totalTaxAfterCredits = Math.max(0, totalTax - credits);
 
   const totalPayments = withholding + estimatedPayments;
-  const refundOrOwed = totalPayments - totalTaxAfterCredits;
+  const refundOrOwed  = totalPayments - totalTaxAfterCredits;
 
   return {
     filingStatus: status,
@@ -259,14 +252,18 @@ export function computeFullTax(params: {
     estimatedPayments,
     totalPayments,
     refundOrOwed,
-    effectiveRate: grossIncome > 0 ? Math.round((totalTaxAfterCredits / grossIncome) * 10000) / 100 : 0,
+    effectiveRate: grossIncome > 0
+      ? Math.round((totalTaxAfterCredits / grossIncome) * 10000) / 100
+      : 0,
     marginalRate: getMarginalRate(taxableIncome, status),
+    capitalGainLine7,
+    capitalLossCarryforward,
   };
 }
 
 /** Format a dollar amount. */
 export function fmtDollar(n: number): string {
-  const abs = Math.abs(n);
+  const abs       = Math.abs(n);
   const formatted = abs.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   return n < 0 ? `-$${formatted}` : `$${formatted}`;
 }

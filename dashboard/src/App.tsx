@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { usePipelineStore } from "./store/pipeline";
 import { AppShell } from "./components/AppShell";
@@ -9,9 +9,17 @@ import { DocumentsView } from "./components/DocumentsView";
 import { CPAGrid } from "./components/CPAGrid";
 import { SetupWizard } from "./components/SetupWizard";
 import { SMSPreview } from "./components/SMSPreview";
+import { BotChat } from "./components/BotChat";
 
-function HistoryView() {
+function HistoryView({ query }: { query: string }) {
   const { history, setActiveTab } = usePipelineStore();
+  const filtered = query.trim()
+    ? history.filter(r =>
+        new Date(r.startedAt).toLocaleString().toLowerCase().includes(query.toLowerCase()) ||
+        r.status.includes(query.toLowerCase()) ||
+        (r.refundOrOwed !== undefined && String(r.refundOrOwed).includes(query))
+      )
+    : history;
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
@@ -23,6 +31,16 @@ function HistoryView() {
           ← Back to Dashboard
         </button>
       </div>
+      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-blue-50 border border-blue-100 text-xs text-blue-700">
+        <span className="font-semibold">Ready to file?</span>
+        <span>Download a run as CSV or JSON, then use</span>
+        <a href="https://www.irs.gov/filing/free-file-do-your-federal-taxes-for-free" target="_blank" rel="noreferrer" className="underline font-medium">IRS Free File</a>
+        <span>·</span>
+        <a href="https://www.freetaxusa.com" target="_blank" rel="noreferrer" className="underline font-medium">FreeTaxUSA</a>
+        <span>·</span>
+        <a href="https://cash.app/taxes" target="_blank" rel="noreferrer" className="underline font-medium">Cash App Taxes</a>
+        <span className="text-blue-500">(all $0 federal)</span>
+      </div>
       {history.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-center bg-white rounded-2xl border border-gray-100 shadow-sm p-10">
           <p className="text-gray-400 text-sm">No past runs yet.</p>
@@ -30,17 +48,41 @@ function HistoryView() {
             Start your first tax analysis →
           </button>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 text-gray-400 text-sm">No runs match "{query}"</div>
       ) : (
         <div className="space-y-3">
-          {history.map(run => (
+          {filtered.map(run => (
             <div key={run.runId} className="px-5 py-4 rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-700 font-medium">{new Date(run.startedAt).toLocaleString()}</p>
-                <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold ${
-                  run.status === "complete" ? "bg-green-50 text-green-600 border-green-200" :
-                  run.status === "error"    ? "bg-red-50 text-red-600 border-red-200" :
-                  "bg-gray-50 text-gray-500 border-gray-200"
-                }`}>{run.status}</span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold ${
+                    run.status === "complete" ? "bg-green-50 text-green-600 border-green-200" :
+                    run.status === "error"    ? "bg-red-50 text-red-600 border-red-200" :
+                    "bg-gray-50 text-gray-500 border-gray-200"
+                  }`}>{run.status}</span>
+                  {run.status === "complete" && (
+                    <div className="flex items-center gap-1">
+                      <a
+                        href={`/api/history/${run.runId}/export?format=csv`}
+                        download
+                        className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                        title="Download CSV"
+                      >
+                        CSV
+                      </a>
+                      <a
+                        href={`/api/history/${run.runId}/export?format=json`}
+                        download
+                        className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                        title="Download JSON"
+                      >
+                        JSON
+                      </a>
+                    </div>
+                  )}
+                </div>
               </div>
               {run.refundOrOwed !== undefined && (
                 <p className={`text-xl font-bold mt-2 ${run.refundOrOwed >= 0 ? "text-blue-600" : "text-red-500"}`}>
@@ -60,6 +102,7 @@ function HistoryView() {
 
 export function App() {
   const { activeTab, setConfig, loadHistory } = usePipelineStore();
+  const [historyQuery, setHistoryQuery] = useState("");
 
   // Connect WebSocket for live pipeline events
   useWebSocket();
@@ -86,10 +129,11 @@ export function App() {
     pipeline:  { title: "Financial Summary",   subtitle: `Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ago` },
     form1040:  { title: "Form 1040",           subtitle: "AI-generated estimate" },
     documents: { title: "Document Intelligence", subtitle: "Automated parsing of your fiscal ecosystem" },
-    cpa:       { title: "Find CPAs",           subtitle: "Tax professionals near you" },
+    cpa:       { title: "Find Tax Pros",        subtitle: "CPAs, EAs, online services & freelancers" },
     sms:       { title: "Report Delivery",     subtitle: "SMS & Telegram" },
     editor:    { title: "Number Editor" },
     history:   { title: "Run History" },
+    bot:       { title: "TaxBot Assistant",    subtitle: "Chat with your tax data — also available via Telegram & SMS" },
     setup:     { title: "Settings",            subtitle: "Configure your data sources and delivery" },
   };
 
@@ -102,12 +146,17 @@ export function App() {
     cpa:       <CPAGrid />,
     sms:       <SMSPreview />,
     editor:    <div className="p-6 text-slate-500 text-sm">Number editor coming soon.</div>,
-    history:   <HistoryView />,
+    history:   <HistoryView query={historyQuery} />,
+    bot:       <BotChat />,
     setup:     <SetupWizard />,
   };
 
   return (
-    <AppShell pageTitle={meta?.title} pageSubtitle={meta?.subtitle}>
+    <AppShell
+      pageTitle={meta?.title}
+      pageSubtitle={meta?.subtitle}
+      onHistorySearch={activeTab === "history" ? setHistoryQuery : undefined}
+    >
       {content[activeTab as Exclude<typeof activeTab, "landing">]}
     </AppShell>
   );

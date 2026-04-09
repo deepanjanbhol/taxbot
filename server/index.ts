@@ -28,8 +28,13 @@ import open from "open";
 import { randomUUID } from "crypto";
 
 import { runOrchestrator } from "./orchestrator.js";
+import { handleTelegramWebhook, handleTwilioWebhook, type TelegramUpdate, type TwilioWebhookBody } from "./bot-handler.js";
+import { startTelegramPoller, isTelegramPolling } from "./telegram-poller.js";
+import { encryptConfig, decryptConfig } from "./keychain.js";
+import { buildTaxExport, exportToCSV } from "./tax-export.js";
 import type { TaxBotConfig } from "../dashboard/src/types/pipeline.js";
 import { generateForm1040 } from "../src/tools/form-generator.js";
+import { TAX_RULES, BBB_RULES, IRS_LIMITS, getSaltCap, getCTCPerChild } from "../src/utils/tax-rules-loader.js";
 import { findCPAs, formatCPAListForSms } from "../src/tools/cpa-finder.js";
 import { sendTaxReport } from "../src/tools/sms-sender.js";
 import { sendTelegramReport } from "../src/tools/telegram-sender.js";
@@ -56,14 +61,16 @@ function waitForInput(runId: string): Promise<string> {
 
 async function loadConfig(): Promise<TaxBotConfig | null> {
   try {
-    const raw = await fs.readFile(CONFIG_PATH, "utf-8");
-    return JSON.parse(raw) as TaxBotConfig;
+    const raw    = await fs.readFile(CONFIG_PATH, "utf-8");
+    const config = JSON.parse(raw) as TaxBotConfig;
+    return await decryptConfig(config);
   } catch { return null; }
 }
 
 async function saveConfig(config: TaxBotConfig): Promise<void> {
+  const encrypted = await encryptConfig(config);
   await fs.mkdir(path.dirname(CONFIG_PATH), { recursive: true });
-  await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
+  await fs.writeFile(CONFIG_PATH, JSON.stringify(encrypted, null, 2));
 }
 
 async function listHistory() {
@@ -82,7 +89,11 @@ async function listHistory() {
 async function saveRun(result: unknown) {
   const run = result as { runId: string };
   await fs.mkdir(HISTORY_DIR, { recursive: true });
-  await fs.writeFile(path.join(HISTORY_DIR, `${run.runId}.json`), JSON.stringify(result, null, 2));
+  // Persist full orchestrator result — form1040, extractedData, cpaList, bbbProvisions
+  await fs.writeFile(
+    path.join(HISTORY_DIR, `${run.runId}.json`),
+    JSON.stringify(result, null, 2),
+  );
 }
 
 // ── Express app ───────────────────────────────────────────────────────────────
@@ -93,6 +104,34 @@ app.use(express.json({ limit: "5mb" }));
 
 // Serve React SPA from built output
 app.use(express.static(PUBLIC_DIR));
+
+// ── Tax rules endpoint — serves KB data to dashboard UI ──────────────────────
+
+app.get("/api/tax-rules", (_req, res) => {
+  const bbb = BBB_RULES.provisions;
+  res.json({
+    taxYear:                       TAX_RULES._meta.taxYear,
+    bbbEnacted:                    BBB_RULES.enacted,
+    tipExclusionMax:               bbb.tipIncomeExclusion.maxExclusion,
+    overtimeExclusionMax:          bbb.overtimeExclusion.maxExclusion,
+    seniorDeductionAmount:         bbb.seniorDeduction.amount,
+    carLoanInterestMax:            bbb.carLoanInterestDeduction.maxDeduction,
+    ctcAmountBBB:                  getCTCPerChild(true),
+    ctcAmountBaseline:             getCTCPerChild(false),
+    qbiRateBBB:                    bbb.qbiDeduction.rate,
+    qbiRateBaseline:               TAX_RULES.qbi.rateBaseline,
+    saltCapBaseline:               TAX_RULES.saltCap.baseline,
+    saltCapBBB:                    bbb.saltCap.byFilingStatus,
+    studentLoanInterestMax:        IRS_LIMITS.studentLoanInterest.maxDeduction,
+    studentLoanPhaseOutStart:      IRS_LIMITS.studentLoanInterest.phaseOutStart,
+    educatorExpensesMax:           IRS_LIMITS.educatorExpenses.maxDeduction,
+    iraLimit:                      IRS_LIMITS.retirementAccounts.traditionalIra.limit,
+    iraCatchUp50:                  IRS_LIMITS.retirementAccounts.traditionalIra.catchUpAge50,
+    hsaSelfOnlyLimit:              IRS_LIMITS.hsa.selfOnly.limit,
+    hsaFamilyLimit:                IRS_LIMITS.hsa.family.limit,
+    standardDeductions:            TAX_RULES.standardDeductions,
+  });
+});
 
 // ── Config routes ─────────────────────────────────────────────────────────────
 
@@ -177,6 +216,16 @@ app.post("/api/config/gmail-callback", async (req, res) => {
 
 // ── Pipeline routes ───────────────────────────────────────────────────────────
 
+app.post("/api/pipeline/respond", (req, res) => {
+  const { runId, answer } = req.body as { runId?: string; answer?: string };
+  if (!runId || !answer) return res.status(400).json({ error: "runId and answer required" });
+  const resolve = pendingHumanInputs.get(runId);
+  if (!resolve) return res.status(404).json({ error: "No pending input for this runId" });
+  pendingHumanInputs.delete(runId);
+  resolve(answer);
+  return res.json({ ok: true });
+});
+
 app.post("/api/pipeline/run", async (req, res) => {
   const config = ((req.body as { config?: TaxBotConfig }).config) ?? await loadConfig();
   if (!config) return res.status(400).json({ error: "No config found. Complete setup first." });
@@ -186,7 +235,18 @@ app.post("/api/pipeline/run", async (req, res) => {
 
   // Fire-and-forget — events delivered via WS
   runOrchestrator(wsClients, config, runId, waitForInput)
-    .then(result => saveRun({ runId: result.runId, startedAt: result.startedAt, completedAt: result.completedAt, steps: {} as never }))
+    .then(result => saveRun({
+      runId:         result.runId,
+      startedAt:     result.startedAt,
+      completedAt:   result.completedAt,
+      status:        "complete",
+      refundOrOwed:  result.refundOrOwed,
+      form1040:      result.form1040Text,
+      extractedData: result.extractedData,
+      cpaList:       result.cpaList,
+      bbbProvisions: result.bbbProvisions,
+      steps:         [],
+    }))
     .catch(err => {
       console.error("[orchestrator] FATAL:", err instanceof Error ? err.stack : String(err));
     });
@@ -254,12 +314,77 @@ app.get("/api/history/:runId", async (req, res) => {
   }
 });
 
+app.get("/api/history/:runId/export", async (req, res) => {
+  const fmt = (req.query.format as string | undefined) ?? "json";
+  try {
+    const raw = await fs.readFile(path.join(HISTORY_DIR, `${req.params["runId"]}.json`), "utf-8");
+    const run = JSON.parse(raw);
+    const exportData = buildTaxExport(run);
+    if (fmt === "csv") {
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="taxbot-${run.runId.slice(0, 8)}.csv"`);
+      return res.send(exportToCSV(exportData));
+    }
+    res.setHeader("Content-Disposition", `attachment; filename="taxbot-${run.runId.slice(0, 8)}.json"`);
+    return res.json(exportData);
+  } catch {
+    return res.status(404).json({ error: "Run not found" });
+  }
+});
+
 app.delete("/api/history/:runId", async (req, res) => {
   try {
     await fs.unlink(path.join(HISTORY_DIR, `${req.params["runId"]}.json`));
     res.json({ ok: true });
   } catch {
     res.status(404).json({ error: "Run not found" });
+  }
+});
+
+// ── Telegram poller status ────────────────────────────────────────────────────
+
+app.get("/api/telegram/status", (_req, res) => {
+  res.json({ polling: isTelegramPolling() });
+});
+
+// ── Bot chat (dashboard test interface) ──────────────────────────────────────
+
+app.post("/api/bot/chat", async (req, res) => {
+  try {
+    const { message } = req.body as { message?: string };
+    if (!message?.trim()) return res.status(400).json({ error: "message required" });
+    const config = await loadConfig();
+    const { handleBotMessage } = await import("./bot-handler.js");
+    const reply = await handleBotMessage(message.trim(), config);
+    return res.json({ reply });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ── Bot webhooks ──────────────────────────────────────────────────────────────
+
+// Telegram: POST https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-server/webhook/telegram
+app.post("/webhook/telegram", async (req, res) => {
+  try {
+    const config = await loadConfig();
+    await handleTelegramWebhook(req.body as TelegramUpdate, config);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[TaxBot Bot] Telegram webhook error:", err);
+    res.json({ ok: true }); // always 200 to Telegram to avoid retries
+  }
+});
+
+// Twilio: configure your Twilio number's messaging webhook to POST to /webhook/twilio
+app.post("/webhook/twilio", async (req, res) => {
+  try {
+    const config = await loadConfig();
+    const twiml = await handleTwilioWebhook(req.body as TwilioWebhookBody, config);
+    res.type("text/xml").send(twiml);
+  } catch (err) {
+    console.error("[TaxBot Bot] Twilio webhook error:", err);
+    res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>Sorry, an error occurred. Please try again.</Message></Response>`);
   }
 });
 
@@ -296,12 +421,25 @@ wss.on("connection", (ws) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`\n🧾 TaxBot Dashboard running at http://127.0.0.1:${PORT}\n`);
+  const isDev = process.env.NODE_ENV === "development";
+  console.log(`\n🧾 TaxBot API server running at http://127.0.0.1:${PORT}`);
+  if (isDev) {
+    console.log(`   Dev mode — open the Vite frontend at http://127.0.0.1:7330\n`);
+  } else {
+    console.log(`   Dashboard: http://127.0.0.1:${PORT}\n`);
+  }
 
-  // Auto-open browser on start (only if not already open)
-  open(`http://127.0.0.1:${PORT}`).catch(() => {
-    console.log(`   Open manually: http://127.0.0.1:${PORT}`);
-  });
+  // Start Telegram long-poll loop (works from localhost — no webhook/ngrok needed)
+  startTelegramPoller(loadConfig).catch(err =>
+    console.warn("[TaxBot Telegram] Poller failed to start:", err)
+  );
+
+  // Auto-open browser only in production; dev uses the Vite frontend at :7330
+  if (!isDev) {
+    open(`http://127.0.0.1:${PORT}`).catch(() => {
+      console.log(`   Open manually: http://127.0.0.1:${PORT}`);
+    });
+  }
 });
 
 export { app, server, wss };

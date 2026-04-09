@@ -4,16 +4,7 @@ import { usePipelineStore } from "../store/pipeline";
 const WS_URL = `ws://${window.location.hostname}:7329/ws`;
 const RECONNECT_DELAY_MS = 2000;
 
-// Module-level ref so sendWsMessage can be called from anywhere
 let _ws: WebSocket | null = null;
-
-export function sendWsMessage(data: Record<string, unknown>) {
-  if (_ws?.readyState === WebSocket.OPEN) {
-    _ws.send(JSON.stringify(data));
-  } else {
-    console.warn("[TaxBot WS] cannot send — not connected");
-  }
-}
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
